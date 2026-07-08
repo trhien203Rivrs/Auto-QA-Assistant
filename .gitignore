@@ -1,0 +1,5 @@
+venv/
+.env
+*.bugs.json
+*.bugs.md
+__pycache__/
