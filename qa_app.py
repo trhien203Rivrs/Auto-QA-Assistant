@@ -22,7 +22,6 @@ import datetime
 import os
 import queue
 import re
-import shutil
 import subprocess
 import sys
 import threading
@@ -334,6 +333,10 @@ class App:
                                  command=self.analyze, state="disabled")
         self.an_btn.grid(row=3, column=0, columnspan=3, sticky="ew", padx=10)
 
+        ttk.Button(r, text="Xem sessions (review + push Jira)",
+                   command=self.open_review).grid(row=5, column=0, columnspan=3,
+                                                  sticky="ew", padx=10, pady=(0, 4))
+
         self.status_var = tk.StringVar(value="Sẵn sàng.")
         ttk.Label(r, textvariable=self.status_var, foreground="#666",
                   wraplength=560).grid(row=4, column=0, columnspan=3, sticky="w", **pad)
@@ -396,6 +399,22 @@ class App:
         self.rec_btn.config(text="■  Dừng")
         self.an_btn.config(state="disabled")
 
+    # -- review server (server.py chạy nền trong app) --
+    def ensure_server(self):
+        if getattr(self, "_server", None):
+            return
+        import uvicorn
+        import server
+        cfg = uvicorn.Config(server.app, host="127.0.0.1", port=8756,
+                             log_level="warning")
+        self._server = uvicorn.Server(cfg)
+        threading.Thread(target=self._server.run, daemon=True).start()
+
+    def open_review(self, session_id=None):
+        self.ensure_server()
+        url = "http://127.0.0.1:8756/" + (f"#{session_id}" if session_id else "")
+        webbrowser.open(url)
+
     # -- analyze --
     def analyze(self):
         outdir = self.outdir
@@ -404,23 +423,16 @@ class App:
         self.an_btn.config(state="disabled")
 
         def work():
-            full, ai = outdir / "session.mp4", outdir / "session.ai.mp4"
+            import pipeline
             self.status("Đang upload + phân tích bằng Gemini (vài phút)...")
-            env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-            r = subprocess.run([sys.executable, "bug_report.py", str(ai)],
-                               capture_output=True, text=True, env=env,
-                               encoding="utf-8", errors="replace")
-            if r.returncode != 0:
-                self.status(f"Phân tích lỗi: {(r.stderr or '').strip()[-300:]}")
+            try:
+                data = pipeline.analyze_session(outdir)
+            except Exception as e:
+                self.status(f"Phân tích lỗi: {str(e)[-300:]}")
                 self.root.after(0, self.an_btn.config, {"state": "normal"})
                 return
-            # bugs của bản AI dùng chung timeline với bản gốc
-            shutil.copy(f"{ai}.bugs.json", f"{full}.bugs.json")
-            subprocess.run([sys.executable, "make_review.py", str(full)],
-                           capture_output=True)
-            html = Path(f"{full}.review.html").resolve()
-            webbrowser.open(html.as_uri())
-            self.status(f"Xong — đã mở {html.name}")
+            self.root.after(0, self.open_review, outdir.name)
+            self.status(f"Xong — {len(data['bugs'])} bug. Review + push Jira trong trình duyệt.")
             self.root.after(0, self.an_btn.config, {"state": "normal"})
 
         threading.Thread(target=work, daemon=True).start()

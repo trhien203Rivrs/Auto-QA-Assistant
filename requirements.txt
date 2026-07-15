@@ -12,4 +12,9 @@ numpy==2.2.6
 uiautomation==2.0.29
 sounddevice==0.5.5
 
+# Server review + push Jira (server.py, jira_push.py)
+fastapi
+uvicorn
+requests
+
 # Ngoài ra cần ffmpeg trên máy:  winget install Gyan.FFmpeg

@@ -10,4 +10,5 @@ model-vn/
 m.zip*
 __pycache__/
 sessions/
+jira_settings.json
 region-capture/captures/
