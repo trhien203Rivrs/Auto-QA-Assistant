@@ -2,4 +2,12 @@ venv/
 .env
 *.bugs.json
 *.bugs.md
+*.review.html
+*.mp4
+.crops.json
+model/
+model-vn/
+m.zip*
 __pycache__/
+sessions/
+region-capture/captures/

@@ -12,6 +12,8 @@ import time
 import json
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8")  # console Windows in được tiếng Việt
+
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from google import genai
@@ -19,6 +21,7 @@ from google.genai import types
 
 load_dotenv()  # đọc .env: GEMINI_API_KEY, GEMINI_MODEL
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-pro-preview")
+FPS = float(os.environ.get("SAMPLE_FPS", "1"))  # số frame/giây gửi Gemini (voice là chính)
 
 SYSTEM = (
     "Bạn là 1 trợ lý AI của QA. Đây là video quay lại một người vừa chơi game "
@@ -56,13 +59,20 @@ def upload_video(client, video_path: str):
 
 def run_model(client, video_file, model: str):
     """Trả về (Report, response) - response chứa usage_metadata."""
+    # Lấy mẫu FPS frame/giây + hạ media_resolution -> giảm token mạnh cho video dài.
+    part = types.Part(
+        file_data=types.FileData(file_uri=video_file.uri,
+                                 mime_type=video_file.mime_type),
+        video_metadata=types.VideoMetadata(fps=FPS),
+    )
     resp = client.models.generate_content(
         model=model,
-        contents=[video_file, "Hãy tìm và báo cáo tất cả các lỗi trong video này."],
+        contents=[part, "Hãy tìm và báo cáo tất cả các lỗi trong video này."],
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM,
             response_mime_type="application/json",
             response_schema=Report,
+            media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW,
         ),
     )
     return Report.model_validate_json(resp.text), resp

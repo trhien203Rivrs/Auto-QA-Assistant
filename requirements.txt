@@ -1,0 +1,15 @@
+# Phân tích video (bug_report.py)
+google-genai==2.10.0
+pydantic==2.13.4
+python-dotenv==1.2.2
+
+# Quay màn hình/cửa sổ WGC + chọn vùng crop (record.py)
+windows-capture==2.0.0
+opencv-python==5.0.0.93
+numpy==2.2.6
+
+# App QA Recorder (qa_app.py): chọn vùng bằng hover + VU meter mic
+uiautomation==2.0.29
+sounddevice==0.5.5
+
+# Ngoài ra cần ffmpeg trên máy:  winget install Gyan.FFmpeg
