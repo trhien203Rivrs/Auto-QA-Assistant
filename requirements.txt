@@ -11,10 +11,12 @@ numpy==2.2.6
 # App QA Recorder (qa_app.py): chọn vùng bằng hover + VU meter mic
 uiautomation==2.0.29
 sounddevice==0.5.5
+sv-ttk==2.6.0  # theme Sun Valley (Win11) cho tkinter
 
 # Server review + push Jira (server.py, jira_push.py)
 fastapi
 uvicorn
 requests
+python-multipart
 
 # Ngoài ra cần ffmpeg trên máy:  winget install Gyan.FFmpeg

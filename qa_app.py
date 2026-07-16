@@ -6,9 +6,8 @@ Flow:
      (bám theo cửa sổ khi di chuyển, quay được GPU/Roblox, không sợ bị che);
      nếu phần tử nhỏ hơn cửa sổ thì crop đúng vùng đó bên trong cửa sổ.
   2. Chọn mic (dropdown, mặc định mic đầu tiên) — thanh VU rung là audio OK.
-  3. Bắt đầu -> chơi + nói bug -> Dừng. Ghi ra 2 file trong sessions/<time>/:
-        session.mp4     : bản gốc 30fps + audio thường (để xem lại)
-        session.ai.mp4  : 1fps, 480p, mono (bản nhẹ gửi Gemini)
+  3. Bắt đầu -> chơi + nói bug -> Dừng. Ghi session.mp4 vào sessions/<time>/.
+     (bản nhẹ session.ai.mp4 gửi Gemini được nén lúc bấm Phân tích — pipeline.py)
   4. "Phân tích": chạy bug_report.py trên bản AI (batch), rồi make_review.py
      trên bản gốc -> tự mở trang review (timeline + click nhảy tới bug).
 
@@ -25,6 +24,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
 
@@ -39,8 +39,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from record import find_ffmpeg  # noqa: E402
 
-AI_FPS = os.environ.get("AI_FPS", "1")
-AI_HEIGHT = os.environ.get("AI_HEIGHT", "480")
+REC_CRF = os.environ.get("REC_CRF", "28")  # nén bản gốc: cao hơn = nhẹ hơn (18–30 hợp lý)
+REC_FPS = os.environ.get("REC_FPS", "20")  # fps bản gốc (bản AI: AI_FPS trong pipeline.py)
 SESSIONS = Path("sessions")
 VK = {"F8": 0x77, "ESC": 0x1B}
 
@@ -155,18 +155,41 @@ def screen_to_frame_crop(hwnd, screen_rect, fw, fh):
 
 
 # -------------------------------------------------------------- recorder ----
+def _finalize_mp4(ff, path):
+    """Remux frag mp4 -> mp4 chuẩn +faststart: mvhd có duration thật.
+
+    File fragmented có mvhd duration=0 nên mỗi player tự đoán độ dài một kiểu
+    (web vs Media Player kết thúc khác nhau). Remux copy-only, chạy ~1 giây.
+    """
+    tmp = path.with_suffix(".fix.mp4")
+    r = subprocess.run([ff, "-y", "-i", str(path), "-c", "copy",
+                        "-movflags", "+faststart", str(tmp)], capture_output=True)
+    if r.returncode == 0 and tmp.exists() and tmp.stat().st_size > 0:
+        tmp.replace(path)
+    else:
+        tmp.unlink(missing_ok=True)  # remux hỏng thì giữ bản frag còn xem được
+
+
 def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
-    """WGC -> 1 ffmpeg, 2 output: bản gốc 30fps + bản AI nhẹ. Chạy trong thread."""
+    """WGC -> ffmpeg, chỉ ghi bản gốc. Bản AI nén sau, lúc bấm Phân tích
+    (pipeline.make_ai_copy) — lúc quay encode càng nhẹ càng ít lệch tiếng/hình."""
     from windows_capture import WindowsCapture
 
-    full, ai = outdir / "session.mp4", outdir / "session.ai.mp4"
+    full = outdir / "session.mp4"
     cap = WindowsCapture(cursor_capture=True, window_hwnd=hwnd,
                          monitor_index=None if hwnd else 1)
-    q = queue.Queue(maxsize=60)
+    # queue nhỏ: frame nằm chờ lâu sẽ bị wallclock đóng dấu trễ -> hình trôi so với tiếng
+    q = queue.Queue(maxsize=20)
     dims, state = {}, {}
+    frame_gap = 1.0 / float(REC_FPS)
 
     @cap.event
     def on_frame_arrived(frame, ctrl):
+        # WGC bắn theo refresh màn hình (60Hz+); chỉ giữ ~REC_FPS để encode nhẹ đi 3-8 lần
+        now = time.monotonic()
+        if now < state.get("next_t", 0.0):
+            return
+        state["next_t"] = now + frame_gap
         fb = frame.frame_buffer
         if "crop" not in state:  # tính crop 1 lần khi biết kích thước frame
             if screen_rect and hwnd:
@@ -204,25 +227,30 @@ def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
     amap = ["-map", "1:a"] if audio else []
     cmd = [ff, "-y",
            "-f", "rawvideo", "-pix_fmt", "bgra", "-s", f"{w}x{h}",
+           "-thread_queue_size", "32",
            "-use_wallclock_as_timestamps", "1", "-i", "pipe:0"]
     if audio:
-        cmd += ["-f", "dshow", "-i", f"audio={audio}"]
+        # rtbufsize lớn + thread_queue lớn: encode nghẽn thì audio CHỜ thay vì bị vứt
+        # (buffer mặc định ~3MB = 17s; tràn là mất mẫu -> giọng đứt đoạn, trôi sớm dần).
+        # wallclock: audio cùng đồng hồ với video -> mux thẳng hàng.
+        cmd += ["-f", "dshow", "-rtbufsize", "512M", "-thread_queue_size", "4096",
+                "-use_wallclock_as_timestamps", "1", "-i", f"audio={audio}"]
     # output 1: bản gốc để xem lại
+    # movflags frag: ghi file dạng fragmented -> app/ffmpeg chết giữa chừng vẫn xem được
     cmd += ["-map", "0:v"] + amap + [
-        "-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-r", "30",
-        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
+        "-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-r", REC_FPS,
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", REC_CRF,
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+frag_keyframe+empty_moov+default_base_moof"]
     if audio:
-        cmd += ["-c:a", "aac", "-shortest"]
+        # aresample=async=1: nếu vẫn mất mẫu thì lấp im lặng ĐÚNG VỊ TRÍ theo timestamp,
+        # thay vì để timeline audio co ngắn lại (giọng nói trôi sớm so với hình)
+        cmd += ["-af", "aresample=async=1", "-c:a", "aac", "-shortest"]
     cmd += [str(full)]
-    # output 2: bản nhẹ gửi AI (fps thấp, 480p, mono)
-    cmd += ["-map", "0:v"] + amap + [
-        "-vf", f"fps={AI_FPS},scale=-2:{AI_HEIGHT}",
-        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
-    if audio:
-        cmd += ["-ac", "1", "-c:a", "aac", "-b:a", "48k", "-shortest"]
-    cmd += [str(ai)]
 
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    # stderr ra file log: thấy được cảnh báo 'real-time buffer too full' nếu còn mất audio
+    log = open(outdir / "ffmpeg.log", "wb")
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=log)
     try:
         proc.stdin.write(first)
         while not stop_evt.is_set():
@@ -245,7 +273,9 @@ def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
         except Exception:
             pass
         proc.wait()
-    status(f"Đã lưu {full.name} + {ai.name} — bấm Phân tích khi sẵn sàng.")
+        log.close()
+    _finalize_mp4(ff, full)
+    status(f"Đã lưu {full.name} — bấm Phân tích khi sẵn sàng (bản AI nén lúc đó).")
 
 
 # -------------------------------------------------------------- mic meter ---
@@ -308,7 +338,12 @@ class App:
         r.title("QA Recorder")
         r.attributes("-topmost", True)
         r.resizable(False, False)
-        pad = {"padx": 10, "pady": 4}
+        try:
+            import sv_ttk
+            sv_ttk.set_theme("dark")  # ponytail: theme Win11, không có thì dùng ttk mặc định
+        except ImportError:
+            pass
+        pad = {"padx": 12, "pady": 6}
 
         ttk.Label(r, text="1. Vùng quay").grid(row=0, column=0, sticky="w", **pad)
         self.region_lbl = ttk.Label(r, text="Toàn màn hình (chưa chọn)", width=44)

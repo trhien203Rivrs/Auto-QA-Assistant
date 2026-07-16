@@ -6,11 +6,17 @@ API key:  set GEMINI_API_KEY=...   (Windows)  /  export GEMINI_API_KEY=...
 Dùng:     python bug_report.py <video.mp4>
 Xuất ra:  <video>.bugs.json  và  <video>.bugs.md
 """
+import concurrent.futures
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 import json
 from pathlib import Path
+
+from record import find_ffmpeg
 
 sys.stdout.reconfigure(encoding="utf-8")  # console Windows in được tiếng Việt
 
@@ -22,6 +28,8 @@ from google.genai import types
 load_dotenv()  # đọc .env: GEMINI_API_KEY, GEMINI_MODEL
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-pro-preview")
 FPS = float(os.environ.get("SAMPLE_FPS", "1"))  # số frame/giây gửi Gemini (voice là chính)
+CHUNK_SEC = int(os.environ.get("CHUNK_SEC", "1200"))     # video dài hơn -> chia khúc 20 phút
+ANALYZE_WORKERS = int(os.environ.get("ANALYZE_WORKERS", "3"))  # số khúc phân tích song song
 
 SYSTEM = (
     "Bạn là 1 trợ lý AI của QA. Đây là video quay lại một người vừa chơi game "
@@ -78,12 +86,77 @@ def run_model(client, video_file, model: str):
     return Report.model_validate_json(resp.text), resp
 
 
+def _ffprobe_dur(path) -> float:
+    ff = find_ffmpeg()
+    ffprobe = str(Path(ff).with_name(Path(ff).name.replace("ffmpeg", "ffprobe")))
+    out = subprocess.run([ffprobe, "-v", "error", "-show_entries", "format=duration",
+                          "-of", "csv=p=0", str(path)], capture_output=True, text=True)
+    return float(out.stdout.strip())
+
+
+def _secs(t: str) -> int:
+    s = 0
+    for p in t.split(":"):
+        s = s * 60 + int(p)
+    return s
+
+
+def _shift(t: str | None, offset: int) -> str | None:
+    """Cộng offset (giây) vào thời gian MM:SS -> MM:SS (phút có thể >59)."""
+    if not t:
+        return t
+    s = _secs(t) + offset
+    return f"{s // 60:02d}:{s % 60:02d}"
+
+
+def _analyze_chunk(client, path, offset: int, model: str) -> list[Bug]:
+    f = upload_video(client, str(path))
+    report, _ = run_model(client, f, model)
+    for b in report.bugs:  # dời thời gian cục bộ của khúc về mốc toàn video
+        b.start_time = _shift(b.start_time, offset)
+        b.end_time = _shift(b.end_time, offset)
+    return report.bugs
+
+
 def analyze(video_path: str, model: str = MODEL) -> Report:
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    f = upload_video(client, video_path)
-    print("Analyzing (có thể mất vài phút với video dài)...")
-    report, _ = run_model(client, f, model)
-    return report
+    if _ffprobe_dur(video_path) <= CHUNK_SEC:  # đủ ngắn -> 1 call như cũ
+        f = upload_video(client, video_path)
+        print("Analyzing...")
+        report, _ = run_model(client, f, model)
+        return report
+
+    # dài -> cắt khúc (copy stream, nhanh) rồi phân tích song song
+    tmp = Path(tempfile.mkdtemp(prefix="qa_chunks_"))
+    try:
+        subprocess.run(
+            [find_ffmpeg(), "-y", "-i", video_path, "-c", "copy", "-map", "0",
+             "-f", "segment", "-segment_time", str(CHUNK_SEC),
+             "-reset_timestamps", "1", str(tmp / "chunk_%03d.mp4")],
+            check=True, capture_output=True)
+        chunks = sorted(tmp.glob("chunk_*.mp4"))
+        offsets, acc = [], 0.0
+        for c in chunks:  # offset thật theo độ dài từng khúc (cắt theo keyframe nên không đều)
+            offsets.append(int(acc))
+            acc += _ffprobe_dur(c)
+        print(f"Chia {len(chunks)} khúc, phân tích {ANALYZE_WORKERS} luồng song song...")
+
+        def work(arg):
+            path, off = arg
+            try:
+                return _analyze_chunk(client, path, off, model)
+            except Exception as e:  # ponytail: 1 khúc lỗi thì bỏ khúc đó, không fail cả session
+                print(f"  ! khúc {path.name} lỗi, bỏ qua: {str(e)[:200]}")
+                return []
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=ANALYZE_WORKERS) as ex:
+            results = list(ex.map(work, zip(chunks, offsets)))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    bugs = [b for r in results for b in r]
+    bugs.sort(key=lambda b: _secs(b.start_time) if b.start_time else 0)
+    return Report(bugs=bugs)
 
 
 def to_markdown(report: Report) -> str:

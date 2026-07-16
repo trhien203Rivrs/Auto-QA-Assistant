@@ -3,12 +3,14 @@
 Chạy riêng:  python server.py   ->  http://127.0.0.1:8756
 (qa_app.py cũng tự chạy server này nền khi bấm "Xem sessions".)
 """
+import datetime
 import json
+import shutil
 import subprocess
 import threading
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 import jira_push
@@ -30,14 +32,21 @@ def _sdir(sid: str) -> Path:
     return d
 
 
-def _bugs(d: Path):
+def _raw(d: Path) -> dict | None:
     f = d / "bugs.json"
-    return json.loads(f.read_text(encoding="utf-8"))["bugs"] if f.exists() else None
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+
+
+def _bugs(d: Path):
+    raw = _raw(d)
+    return raw["bugs"] if raw else None
 
 
 def _save_bugs(d: Path, bugs: list):
+    data = _raw(d) or {}
+    data["bugs"] = bugs  # giữ nguyên timing và các key khác
     (d / "bugs.json").write_text(
-        json.dumps({"bugs": bugs}, ensure_ascii=False, indent=2), encoding="utf-8")
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _secs(t: str) -> int:
@@ -70,9 +79,23 @@ def list_sessions():
 def get_session(sid: str):
     d = _sdir(sid)
     err = d / "analyze_error.txt"
-    return {"id": d.name, "video": "session.mp4", "bugs": _bugs(d),
+    raw = _raw(d)
+    return {"id": d.name, "video": "session.mp4",
+            "bugs": raw["bugs"] if raw else None,
+            "timing": (raw or {}).get("timing"),
             "analyzing": d.name in _analyzing,
             "error": err.read_text(encoding="utf-8") if err.exists() else None}
+
+
+@app.post("/api/sessions/upload")
+async def upload_session(file: UploadFile):
+    """Tải 1 video có sẵn lên thành session mới (để test pipeline không cần quay)."""
+    sid = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_upload"
+    d = SESSIONS / sid
+    d.mkdir(parents=True)
+    with open(d / "session.mp4", "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"id": sid}
 
 
 @app.post("/api/sessions/{sid}/analyze")

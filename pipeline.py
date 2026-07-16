@@ -6,6 +6,7 @@ bugs.json = {"bugs": [{...Bug, "jira_key": "", "jira_url": ""}]}
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import bug_report
@@ -29,11 +30,16 @@ def analyze_session(session_dir: Path) -> dict:
     full, ai = session_dir / "session.mp4", session_dir / "session.ai.mp4"
     if not full.exists():
         raise FileNotFoundError(f"Không thấy {full}")
+    t0 = time.time()
     if not ai.exists():
         make_ai_copy(full, ai)
+    t1 = time.time()
     report = bug_report.analyze(str(ai))
     data = {"bugs": [{**b.model_dump(), "jira_key": "", "jira_url": ""}
-                     for b in report.bugs]}
+                     for b in report.bugs],
+            "timing": {"compress_s": round(t1 - t0, 1),
+                       "gemini_s": round(time.time() - t1, 1),
+                       "ai_size_mb": round(ai.stat().st_size / 1e6, 1)}}
     (session_dir / "bugs.json").write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return data

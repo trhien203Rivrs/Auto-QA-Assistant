@@ -15,6 +15,7 @@ import sys
 import queue
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -76,12 +77,19 @@ def record_wgc(ff, out, audio, hwnd=None, monitor=None, crop=None):
     from windows_capture import WindowsCapture
 
     cap = WindowsCapture(cursor_capture=True, window_hwnd=hwnd, monitor_index=monitor)
-    q = queue.Queue(maxsize=60)      # hàng đợi frame; đầy -> bỏ frame để khỏi phình RAM
+    # queue nhỏ: frame chờ lâu sẽ bị wallclock đóng dấu trễ -> hình trôi so với tiếng
+    q = queue.Queue(maxsize=20)
     dims = {}
     dropped = [0]
+    state = {"next_t": 0.0}
 
     @cap.event
     def on_frame_arrived(frame, ctrl):
+        # WGC bắn theo refresh màn hình; chỉ giữ ~30fps cho khớp -r 30 ở dưới
+        now = time.monotonic()
+        if now < state["next_t"]:
+            return
+        state["next_t"] = now + 1.0 / 30
         fb = frame.frame_buffer
         if crop:
             x, y, w, h = crop
@@ -110,17 +118,23 @@ def record_wgc(ff, out, audio, hwnd=None, monitor=None, crop=None):
     cmd = [
         ff, "-y",
         "-f", "rawvideo", "-pix_fmt", "bgra", "-s", f"{w}x{h}",
+        "-thread_queue_size", "32",
         "-use_wallclock_as_timestamps", "1", "-i", "pipe:0",
     ]
     if audio:
-        cmd += ["-f", "dshow", "-i", f"audio={audio}"]
+        # rtbufsize lớn: encode nghẽn thì audio CHỜ thay vì bị vứt (mặc định ~3MB=17s,
+        # tràn là mất mẫu -> giọng đứt đoạn, trôi sớm). wallclock: cùng đồng hồ với video.
+        cmd += ["-f", "dshow", "-rtbufsize", "512M", "-thread_queue_size", "4096",
+                "-use_wallclock_as_timestamps", "1", "-i", f"audio={audio}"]
     cmd += [
         "-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2",
         "-r", "30",
         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
     ]
     if audio:
-        cmd += ["-c:a", "aac", "-shortest"]  # -shortest: dừng khi pipe video EOF
+        # aresample=async=1: nếu vẫn mất mẫu thì lấp im lặng đúng vị trí theo timestamp
+        cmd += ["-af", "aresample=async=1", "-c:a", "aac", "-shortest"]
     cmd += [out]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     try:
