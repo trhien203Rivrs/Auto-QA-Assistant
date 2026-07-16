@@ -3,58 +3,107 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QA Review</title>
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --bg:#0b0d12; --panel:#12151c; --panel-2:#161a22; --line:#232833;
+    --line-hi:#333b49; --text:#e8eaed; --muted:#8b93a1; --dim:#6b7280;
+    --accent:#5b9dff; --accent-soft:#1b2740; --red:#ff5a5f; --green:#6ee7a0;
+    --amber:#f0c674;
+  }
   * { box-sizing: border-box; }
-  body { margin:0; font:15px/1.5 system-ui,Segoe UI,sans-serif;
-         background:#0f1115; color:#e6e8eb; display:flex; height:100vh; }
-  #side { flex:0 0 250px; border-right:1px solid #23272f; padding:14px;
-          overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
-  #side h1 { font-size:16px; margin:0 0 4px; }
-  .sess { padding:9px 11px; background:#171a21; border:1px solid #23272f;
-          border-radius:8px; cursor:pointer; font-size:13px; }
-  .sess:hover { border-color:#3a4150; }
-  .sess.active { border-color:#4a8af4; }
-  .sess .meta { color:#7f8794; font-size:12px; }
+  ::selection { background:var(--accent-soft); }
+  body { margin:0; font:15px/1.55 -apple-system,system-ui,"Segoe UI",sans-serif;
+         background:
+           radial-gradient(1200px 600px at 15% -10%, #14203a 0%, transparent 55%),
+           var(--bg);
+         color:var(--text); display:flex; height:100vh;
+         -webkit-font-smoothing:antialiased; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#2a303c; border-radius:6px;
+         border:2px solid transparent; background-clip:content-box; }
+  ::-webkit-scrollbar-thumb:hover { background:#39414f; background-clip:content-box; }
+
+  #side { flex:0 0 268px; border-right:1px solid var(--line);
+          background:rgba(10,12,17,.6); backdrop-filter:blur(6px);
+          padding:16px 14px; overflow-y:auto; display:flex;
+          flex-direction:column; gap:9px; }
+  #side h1 { font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+          color:var(--muted); margin:0 2px 6px; font-weight:600; }
+  #up-btn { width:100%; }
+  .sess { padding:11px 13px; background:var(--panel); border:1px solid var(--line);
+          border-radius:11px; cursor:pointer; font-size:13px; transition:.12s; }
+  .sess:hover { border-color:var(--line-hi); background:var(--panel-2);
+          transform:translateY(-1px); }
+  .sess.active { border-color:var(--accent);
+          box-shadow:0 0 0 1px var(--accent), 0 4px 16px -6px var(--accent); }
+  .sess .meta { color:var(--dim); font-size:12px; margin-top:3px; }
+
   #main { flex:1; display:flex; min-width:0; }
-  #left { flex:1 1 65%; display:flex; flex-direction:column; padding:16px; min-width:0; }
-  video { width:100%; max-height:70vh; background:#000; border-radius:8px; }
-  #bar { position:relative; height:10px; margin:10px 2px 0;
-         background:#2a2e37; border-radius:5px; cursor:pointer; }
+  #left { flex:1 1 65%; display:flex; flex-direction:column; padding:22px; min-width:0; }
+  video { width:100%; max-height:70vh; background:#000; border-radius:14px;
+          box-shadow:0 18px 50px -20px rgba(0,0,0,.8); }
+  #bar { position:relative; height:12px; margin:16px 2px 0;
+         background:#1c212b; border:1px solid var(--line); border-radius:7px;
+         cursor:pointer; }
   #bar .mk { position:absolute; top:-3px; min-width:4px; height:16px;
-             background:#ff5a5f; border-radius:2px; cursor:pointer; opacity:.85; }
-  #bar .mk:hover { opacity:1; box-shadow:0 0 6px #ff5a5f; }
-  #right { flex:1 1 35%; max-width:460px; overflow-y:auto; padding:16px;
-           border-left:1px solid #23272f; }
-  h2 { margin:0 0 12px; font-size:16px; color:#9aa4b2; }
-  .bug { padding:10px 12px; margin-bottom:8px; background:#171a21;
-         border:1px solid #23272f; border-radius:8px; cursor:pointer; }
-  .bug:hover { border-color:#3a4150; }
-  .bug.active { border-color:#ff5a5f; background:#1e1518; }
-  .bug .t { color:#ff8a8d; font-variant-numeric:tabular-nums; font-size:13px; }
-  .bug .n { font-weight:600; margin:2px 0 6px; }
-  .bug dl { margin:6px 0 0; font-size:13px; color:#c2c8d0; }
-  .bug dt { color:#7f8794; margin-top:6px; }
-  .bug dd { margin:0; }
-  button { background:#2a3a55; color:#dbe4f0; border:1px solid #3a4a68;
-           border-radius:6px; padding:6px 12px; cursor:pointer; font-size:13px; }
-  button:hover:not(:disabled) { background:#33486b; }
-  button:disabled { opacity:.5; cursor:default; }
-  .push-row { margin-top:8px; display:flex; align-items:center; gap:8px; }
-  .jira-key { color:#7bd88f; font-size:13px; }
-  .jira-key a { color:#7bd88f; }
-  #jira-box { margin-top:auto; padding-top:10px; border-top:1px solid #23272f;
-              font-size:12px; color:#7f8794; }
-  #jira-box select { width:100%; margin-top:4px; background:#171a21; color:#e6e8eb;
-                     border:1px solid #23272f; border-radius:6px; padding:5px; }
-  .empty { color:#7f8794; margin:auto; text-align:center; }
-  .err { color:#ff8a8d; font-size:13px; white-space:pre-wrap; }
-  .badge { font-size:11px; padding:1px 7px; border-radius:9px; margin-left:5px; }
-  .b-ok { background:#173423; color:#7bd88f; }
-  .b-no { background:#332a17; color:#e6c07b; }
-  .b-run { background:#172433; color:#7bb8e8; }
+             background:var(--red); border-radius:3px; cursor:pointer; opacity:.8;
+             box-shadow:0 0 0 1px rgba(0,0,0,.3); transition:.1s; }
+  #bar .mk:hover { opacity:1; box-shadow:0 0 10px var(--red); }
+  #bar .ph { position:absolute; top:-4px; width:2px; height:18px;
+             background:#fff; border-radius:1px; pointer-events:none;
+             box-shadow:0 0 4px rgba(0,0,0,.6); }
+  #right { flex:1 1 35%; max-width:480px; overflow-y:auto; padding:22px;
+           border-left:1px solid var(--line); }
+  h2 { margin:0 0 14px; font-size:13px; letter-spacing:.06em;
+           text-transform:uppercase; color:var(--muted); font-weight:600; }
+
+  .bug { padding:13px 15px; margin-bottom:10px; background:var(--panel);
+         border:1px solid var(--line); border-radius:12px; cursor:pointer;
+         transition:.12s; }
+  .bug:hover { border-color:var(--line-hi); background:var(--panel-2); }
+  .bug.active { border-color:var(--red); background:#1c1416;
+         box-shadow:0 0 0 1px var(--red), 0 6px 20px -10px var(--red); }
+  .bug .t { color:#ff9a9d; font-variant-numeric:tabular-nums; font-size:12px;
+         font-weight:600; letter-spacing:.02em; }
+  .bug .n { font-weight:650; margin:3px 0 8px; font-size:14.5px; }
+  .bug dl { margin:8px 0 0; font-size:13px; color:#cbd1da; }
+  .bug dt { color:var(--dim); margin-top:8px; font-size:11px;
+         text-transform:uppercase; letter-spacing:.05em; }
+  .bug dd { margin:2px 0 0; }
+
+  button { background:var(--accent); color:#08122a; border:1px solid transparent;
+           border-radius:9px; padding:8px 14px; cursor:pointer; font-size:13px;
+           font-weight:600; transition:.12s; }
+  button:hover:not(:disabled) { filter:brightness(1.08); transform:translateY(-1px); }
+  button:disabled { opacity:.45; cursor:default; }
+  #up-btn, .bug button { background:var(--panel-2); color:var(--text);
+           border-color:var(--line-hi); font-weight:500; }
+  #up-btn:hover:not(:disabled), .bug button:hover:not(:disabled) {
+           background:#222835; }
+  .push-row { margin-top:10px; display:flex; align-items:center; gap:8px; }
+  .jira-key { color:var(--green); font-size:13px; font-weight:600; }
+  .jira-key a { color:var(--green); }
+
+  #jira-box { margin-top:auto; padding-top:12px; border-top:1px solid var(--line);
+              font-size:12px; color:var(--dim); }
+  #jira-box select { width:100%; margin-top:6px; background:var(--panel);
+              color:var(--text); border:1px solid var(--line); border-radius:8px;
+              padding:7px 8px; }
+  .empty { color:var(--muted); margin:auto; text-align:center; max-width:360px;
+           line-height:1.7; }
+  .err { color:#ff9a9d; font-size:13px; white-space:pre-wrap; text-align:left;
+           background:#1c1416; border:1px solid #3a2226; border-radius:8px;
+           padding:10px 12px; }
+  .badge { font-size:11px; padding:2px 9px; border-radius:20px; margin-left:6px;
+           font-weight:600; vertical-align:middle; }
+  .b-ok { background:rgba(110,231,160,.13); color:var(--green); }
+  .b-no { background:rgba(240,198,116,.13); color:var(--amber); }
+  .b-run { background:rgba(91,157,255,.14); color:var(--accent); }
 </style></head><body>
 <div id="side">
   <h1>Sessions</h1>
+  <button id="up-btn" style="width:100%">⬆ Tải video lên (test)</button>
+  <input id="up-file" type="file" accept="video/mp4,video/*" hidden>
   <div id="slist"></div>
   <div id="jira-box">
     Jira: <span id="jira-mode"></span>
@@ -88,6 +137,25 @@ async function loadSessions() {
     $('#slist').appendChild(el);
   }
 }
+
+// ---------------- upload video -> session mới -> tự phân tích ----------------
+$('#up-btn').onclick = () => $('#up-file').click();
+$('#up-file').onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const btn = $('#up-btn');
+  btn.disabled = true; btn.textContent = '⬆ Đang tải lên…';
+  try {
+    const fd = new FormData();
+    fd.append('file', f);
+    const r = await api('/sessions/upload', {method:'POST', body: fd});
+    await api(`/sessions/${r.id}/analyze`, {method:'POST'}); // xử lý như bình thường
+    location.hash = r.id;
+    loadSessions();
+  } catch (err) { alert('Upload lỗi: ' + err.message); }
+  btn.disabled = false; btn.textContent = '⬆ Tải video lên (test)';
+  e.target.value = '';
+};
 
 // ---------------- jira box ----------------
 async function loadJira() {
@@ -144,7 +212,11 @@ async function openSession(id) {
   const vsrc = `/api/sessions/${id}/files/${data.video}`;
   main.innerHTML = `
     <div id="left"><video id="v" controls src="${vsrc}"></video><div id="bar"></div></div>
-    <div id="right"><h2>Bugs (${data.bugs.length})</h2><div id="list"></div></div>`;
+    <div id="right"><h2>Bugs (${data.bugs.length})</h2>
+      ${data.timing ? `<div style="font-size:12px;color:#7f8794;margin:-8px 0 10px">
+        nén ${data.timing.compress_s}s · Gemini ${data.timing.gemini_s}s
+        · bản AI ${data.timing.ai_size_mb} MB</div>` : ''}
+      <div id="list"></div></div>`;
   const v = $('#v'), bar = $('#bar'), list = $('#list');
   const bugs = data.bugs.map(b => ({...b, _start: secs(b.start_time),
     _end: b.end_time ? secs(b.end_time) : null}));
@@ -179,8 +251,12 @@ async function openSession(id) {
   bar.addEventListener('click', e => {
     if (v.duration) v.currentTime = (e.offsetX / bar.clientWidth) * v.duration;
   });
+  const ph = document.createElement('div');
+  ph.className = 'ph';
+  bar.appendChild(ph);
   v.addEventListener('timeupdate', () => {
     const t = v.currentTime;
+    if (v.duration) ph.style.left = (t / v.duration * 100) + '%';
     bugs.forEach((b, i) => cards[i].classList.toggle('active',
       t >= b._start && t <= (b._end ?? b._start + 5)));
   });
