@@ -245,7 +245,10 @@ def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
     if audio:
         # aresample=async=1: nếu vẫn mất mẫu thì lấp im lặng ĐÚNG VỊ TRÍ theo timestamp,
         # thay vì để timeline audio co ngắn lại (giọng nói trôi sớm so với hình)
-        cmd += ["-af", "aresample=async=1", "-c:a", "aac", "-shortest"]
+        # KHÔNG dùng -shortest: mic Bluetooth vào trễ (warmup) không cố định; nếu
+        # clip ngắn hơn warmup, -shortest cắt mất track audio -> "lúc có lúc không".
+        # aresample=async=1 đã lo sync; để ffmpeg xả nốt buffer audio khi đóng.
+        cmd += ["-af", "aresample=async=1", "-c:a", "aac"]
     cmd += [str(full)]
 
     # stderr ra file log: thấy được cảnh báo 'real-time buffer too full' nếu còn mất audio

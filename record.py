@@ -134,7 +134,8 @@ def record_wgc(ff, out, audio, hwnd=None, monitor=None, crop=None):
     ]
     if audio:
         # aresample=async=1: nếu vẫn mất mẫu thì lấp im lặng đúng vị trí theo timestamp
-        cmd += ["-af", "aresample=async=1", "-c:a", "aac", "-shortest"]
+        # KHÔNG -shortest: mic Bluetooth warmup trễ; clip ngắn bị cắt mất tiếng.
+        cmd += ["-af", "aresample=async=1", "-c:a", "aac"]
     cmd += [out]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     try:
