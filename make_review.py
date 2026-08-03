@@ -1,10 +1,12 @@
-"""Tạo trang review: video player + danh sách bug, click là video nhảy tới timestamp.
+"""Tạo trang review offline: video player + danh sách bug, click là video nhảy.
 
 Dùng:  python make_review.py <video>       (cần <video>.bugs.json cạnh nó)
 Ra:    <video>.review.html  -> double-click mở bằng trình duyệt.
 
-Data bug nhúng thẳng vào HTML nên mở file:// được, không cần server.
+Style lấy thẳng từ ui.html (đoạn <style>) nên bản offline luôn khớp web —
+không duplicate CSS ở 2 nơi. Data bug nhúng thẳng vào HTML nên mở file:// được.
 """
+import re
 import sys
 import json
 from pathlib import Path
@@ -12,98 +14,155 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")  # console Windows in được tiếng Việt
 
 
-def secs(t: str) -> int:
-    s = 0
-    for p in t.split(":"):
-        s = s * 60 + int(p)
-    return s
+def extract_css() -> str:
+    """Lấy khối <style> của ui.html để dùng chung thiết kế."""
+    css = (Path(__file__).resolve().parent / "ui.html").read_text(encoding="utf-8")
+    m = re.search(r"<style>(.*?)</style>", css, re.S)
+    return m.group(1) if m else ""
 
 
 TEMPLATE = r"""<!doctype html>
 <html lang="vi"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bug Review — __VIDEO__</title>
+<title>Auto-QA · __VIDEO__</title>
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  body { margin:0; font:15px/1.5 system-ui,Segoe UI,sans-serif;
-         background:#0f1115; color:#e6e8eb; display:flex; height:100vh; }
-  #left { flex:1 1 65%; display:flex; flex-direction:column; padding:16px; min-width:0; }
-  video { width:100%; background:#000; border-radius:8px; }
-  #bar { position:relative; height:10px; margin:10px 2px 0;
-         background:#2a2e37; border-radius:5px; cursor:pointer; }
-  #bar .mk { position:absolute; top:-3px; min-width:4px; height:16px;
-             background:#ff5a5f; border-radius:2px; cursor:pointer; opacity:.85; }
-  #bar .mk:hover { opacity:1; box-shadow:0 0 6px #ff5a5f; }
-  #right { flex:1 1 35%; max-width:440px; overflow-y:auto; padding:16px;
-           border-left:1px solid #23272f; }
-  h2 { margin:0 0 12px; font-size:16px; color:#9aa4b2; }
-  .bug { padding:10px 12px; margin-bottom:8px; background:#171a21;
-         border:1px solid #23272f; border-radius:8px; cursor:pointer; }
-  .bug:hover { border-color:#3a4150; }
-  .bug.active { border-color:#ff5a5f; background:#1e1518; }
-  .bug .t { color:#ff8a8d; font-variant-numeric:tabular-nums; font-size:13px; }
-  .bug .n { font-weight:600; margin:2px 0 6px; }
-  .bug dl { margin:6px 0 0; font-size:13px; color:#c2c8d0; }
-  .bug dt { color:#7f8794; margin-top:6px; }
-  .bug dd { margin:0; }
+__CSS__
 </style></head><body>
-<div id="left">
-  <video id="v" controls src="__VIDEO__"></video>
-  <div id="bar"></div>
-</div>
-<div id="right">
-  <h2 id="hd">Bugs</h2>
-  <div id="list"></div>
+<div id="main">
+  <div class="stage">
+    <video id="v" controls preload="metadata" src="__VIDEO__"></video>
+    <div class="nowbar" id="nowbar"><span class="now-dot"></span><span id="now-txt">—:—</span></div>
+    <div class="tlwrap"><div id="bar"><div class="track"></div></div><div id="tip"></div></div>
+    <span class="kbd">Space phát/dừng · J/K chuyển bug</span>
+  </div>
+  <div class="rail">
+    <div class="rail-head">
+      <h2>Bugs <span class="n" id="bug-count"></span></h2>
+      <div class="chips">
+        <span class="chip open" id="chip-open"></span>
+        <span class="chip pushed" id="chip-pushed"></span>
+      </div>
+      <div class="timing" id="timing"></div>
+    </div>
+    <div id="list"></div>
+  </div>
 </div>
 <script>
 const BUGS = __BUGS__;
-const v = document.getElementById('v'), bar = document.getElementById('bar');
-const list = document.getElementById('list');
-document.getElementById('hd').textContent = `Bugs (${BUGS.length})`;
+const timing = __TIMING__;
+if (timing) document.getElementById('timing').textContent =
+  `nén ${timing.compress_s}s · Gemini ${timing.gemini_s}s · bản AI ${timing.ai_size_mb} MB`;
+const $ = s => document.querySelector(s);
+const secs = t => { let s = 0; for (const p of t.split(':')) s = s * 60 + +p; return s; };
+const v = $('#v'), bar = $('#bar'), list = $('#list'), now = $('#nowbar'), tip = $('#tip');
+$('#bug-count').textContent = BUGS.length;
+const pushedN = BUGS.filter(b => b.jira_key).length;
+$('#chip-open').textContent = `${BUGS.length - pushedN} mở`;
+$('#chip-pushed').textContent = `${pushedN} đã push`;
 
-function fmt(s){ s=Math.floor(s); const m=Math.floor(s/60);
-  return `${String(m).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+const bugs = BUGS.map((b, i) => ({ ...b, i,
+  _start: secs(b.start_time), _end: b.end_time ? secs(b.end_time) : null }));
+let cards = [], markers = [], lastActive = -1;
+const rngOf = b => b.start_time + (b.end_time ? ' – ' + b.end_time : '');
 
-const cards = BUGS.map((b,i) => {
-  const el = document.createElement('div');
+bugs.forEach((b, i) => {
+  const el = document.createElement('article');
   el.className = 'bug';
-  const rng = b.start_time + (b.end_time ? ' – ' + b.end_time : '');
-  el.innerHTML = `<div class="t">${rng}</div><div class="n">${i+1}. ${b.name}</div>
-    <dl><dd>${b.description}</dd>
-    <dt>Actual</dt><dd>${b.actual_result}</dd>
-    <dt>Expected</dt><dd>${b.expected_result}</dd></dl>`;
+  const state = b.jira_key
+    ? `<span class="bug-state"><span class="badge b-pushed">✓ ${b.jira_key}</span></span>`
+    : '<span class="bug-state"><span class="badge b-open">mở</span></span>';
+  el.innerHTML = `<div class="bug-top">
+      <span class="bug-id">#${String(i + 1).padStart(2, '0')}</span>
+      <span class="bug-time">${rngOf(b)}</span>${state}</div>
+    <h3 class="n">${b.name}</h3>
+    <p class="desc">${b.description}</p>
+    <dl>
+      <div><dt>Actual</dt><dd>${b.actual_result}</dd></div>
+      <div><dt>Expected</dt><dd>${b.expected_result}</dd></div>
+    </dl>`;
   el.onclick = () => { v.currentTime = b._start; v.play(); };
   list.appendChild(el);
-  return el;
+  cards.push(el);
 });
 
-// marker trên timeline sau khi biết tổng thời lượng
 v.addEventListener('loadedmetadata', () => {
-  BUGS.forEach(b => {
+  const dur = v.duration || 1;
+  bugs.forEach(b => {
     const mk = document.createElement('div');
-    mk.className = 'mk';
-    const end = b._end ?? b._start;              // không có end -> chấm điểm
-    mk.style.left = (b._start / v.duration * 100) + '%';
-    mk.style.width = ((end - b._start) / v.duration * 100) + '%';
-    mk.title = b.name;
-    mk.onclick = e => { e.stopPropagation();     // đừng để bar seek đè lên
-                        v.currentTime = b._start; v.play(); };
+    mk.className = 'mk' + (b.jira_key ? ' pushed' : '');
+    mk.style.left = (b._start / dur * 100) + '%';
+    mk.style.width = Math.max(0.5, ((b._end ?? b._start + 4) - b._start) / dur * 100) + '%';
+    mk.onclick = e => { e.stopPropagation(); v.currentTime = b._start; v.play(); };
+    mk.addEventListener('mouseenter', e => showTip(e, b));
+    mk.addEventListener('mousemove', moveTip);
+    mk.addEventListener('mouseleave', hideTip);
     bar.appendChild(mk);
+    markers.push(mk);
   });
+  const step = Math.max(30, Math.round(dur / 8 / 30) * 30);
+  for (let t = 0; t < dur; t += step) {
+    const tick = document.createElement('div');
+    tick.className = 'tick';
+    tick.style.left = (t / dur * 100) + '%';
+    tick.textContent = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+    bar.appendChild(tick);
+  }
 });
-// click thanh bar = seek
+
+function showTip(e, b) {
+  tip.innerHTML = `<span class="tt">#${String(b.i + 1).padStart(2, '0')}</span> ${b.name} · <span class="tt">${rngOf(b)}</span>`;
+  tip.classList.add('show'); moveTip(e);
+}
+function moveTip(e) {
+  const r = bar.getBoundingClientRect();
+  tip.style.left = Math.min(Math.max(0, e.clientX - r.left - 40), r.width - 120) + 'px';
+  tip.style.top = '-8px';
+}
+function hideTip() { tip.classList.remove('show'); }
+
 bar.addEventListener('click', e => {
-  if (v.duration) v.currentTime = (e.offsetX / bar.clientWidth) * v.duration;
+  if (e.target !== bar && !e.target.classList.contains('track')) return;
+  const r = bar.getBoundingClientRect();
+  if (v.duration) v.currentTime = (e.clientX - r.left) / r.width * v.duration;
 });
-// highlight bug đang phát
+
+const ph = document.createElement('div');
+ph.className = 'ph'; bar.appendChild(ph);
 v.addEventListener('timeupdate', () => {
   const t = v.currentTime;
-  BUGS.forEach((b,i) => {
-    const on = t >= b._start && t <= (b._end ?? b._start + 5);
-    cards[i].classList.toggle('active', on);
-  });
+  if (v.duration) ph.style.left = (t / v.duration * 100) + '%';
+  let act = -1;
+  for (const b of bugs) if (t >= b._start && t <= (b._end ?? b._start + 5)) { act = b.i; break; }
+  const nowTxt = $('#now-txt');
+  if (act >= 0) {
+    now.classList.add('on');
+    nowTxt.innerHTML = `bug <span id="now-name">#${String(act + 1).padStart(2, '0')}</span>
+      <span style="color:var(--muted)">· ${bugs[act].start_time}${bugs[act].end_time ? '–' + bugs[act].end_time : ''} · ${bugs[act].name}</span>`;
+    markers.forEach((m, i) => m.classList.toggle('active', i === act));
+    if (act !== lastActive) { cards[act].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); lastActive = act; }
+  } else {
+    now.classList.remove('on');
+    nowTxt.textContent = '—:—';
+    markers.forEach(m => m.classList.remove('active'));
+  }
 });
+
+document.addEventListener('keydown', e => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (['input','select','textarea','video'].includes(tag) || e.target.isContentEditable) return;
+  if (e.code === 'Space') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
+  else if (e.key === 'j') jump(1);
+  else if (e.key === 'k') jump(-1);
+});
+function jump(dir) {
+  if (!v.duration) return;
+  const t = v.currentTime;
+  let cand = bugs[0]._start, candI = 0;
+  if (dir > 0) { for (const b of bugs) if (b._start > t + .3) { cand = b._start; candI = b.i; break; } }
+  else { for (let i = bugs.length - 1; i >= 0; i--) if (bugs[i]._start < t - .3) { cand = bugs[i]._start; candI = bugs[i].i; break; } }
+  v.currentTime = cand; v.play();
+  cards[candI].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
 </script></body></html>
 """
 
@@ -112,16 +171,16 @@ def main():
     if len(sys.argv) != 2:
         sys.exit("Dùng: python make_review.py <video>")
     p = Path(sys.argv[1])
-    bugs = json.loads(
-        p.with_suffix(p.suffix + ".bugs.json").read_text(encoding="utf-8")
-    )["bugs"]
-    for b in bugs:
-        b["_start"] = secs(b["start_time"])
-        b["_end"] = secs(b["end_time"]) if b.get("end_time") else None
+    data = json.loads(
+        p.with_suffix(p.suffix + ".bugs.json").read_text(encoding="utf-8"))
+    bugs = data["bugs"]
+    timing = data.get("timing")
 
     out_html = (TEMPLATE
+                .replace("__CSS__", extract_css())
                 .replace("__VIDEO__", p.name)
-                .replace("__BUGS__", json.dumps(bugs, ensure_ascii=False)))
+                .replace("__BUGS__", json.dumps(bugs, ensure_ascii=False))
+                .replace("__TIMING__", json.dumps(timing) if timing else "null"))
     out = p.with_suffix(p.suffix + ".review.html")
     out.write_text(out_html, encoding="utf-8")
     print("Mở trang này bằng trình duyệt:")

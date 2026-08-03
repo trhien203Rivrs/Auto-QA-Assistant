@@ -1,171 +1,279 @@
 <!doctype html>
 <html lang="vi"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QA Review</title>
+<title>Auto-QA · Review</title>
 <style>
   :root {
     color-scheme: dark;
-    --bg:#0b0d12; --panel:#12151c; --panel-2:#161a22; --line:#232833;
-    --line-hi:#333b49; --text:#e8eaed; --muted:#8b93a1; --dim:#6b7280;
-    --accent:#5b9dff; --accent-soft:#1b2740; --red:#ff5a5f; --green:#6ee7a0;
-    --amber:#f0c674;
+    --ink:#14161b; --panel:#1b1e25; --panel2:#232730; --line:#2a2f3a; --line2:#3b4250;
+    --text:#e9ebef; --muted:#98a0ad; --dim:#6c7482;
+    --accent:#f2a33c; --accent-ink:#241a06; --accent-soft:rgba(242,163,60,.12);
+    --green:#5fd39a; --green-ink:#0d2418; --red:#ff6b6b; --blue:#6ea8ff;
+    --ui:-apple-system,"Segoe UI Variable","Segoe UI",system-ui,sans-serif;
+    --mono:ui-monospace,"Cascadia Code",Consolas,"SF Mono",Monaco,monospace;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing:border-box; }
   ::selection { background:var(--accent-soft); }
-  body { margin:0; font:15px/1.55 -apple-system,system-ui,"Segoe UI",sans-serif;
-         background:
-           radial-gradient(1200px 600px at 15% -10%, #14203a 0%, transparent 55%),
-           var(--bg);
-         color:var(--text); display:flex; height:100vh;
-         -webkit-font-smoothing:antialiased; }
+  body { margin:0; font:14px/1.55 var(--ui); color:var(--text);
+    background:
+      radial-gradient(1100px 520px at 12% -8%, #1e1a12 0%, transparent 55%),
+      radial-gradient(900px 480px at 100% 0%, #14202e 0%, transparent 55%),
+      var(--ink);
+    display:flex; height:100vh; overflow:hidden;
+    -webkit-font-smoothing:antialiased; }
   ::-webkit-scrollbar { width:10px; height:10px; }
-  ::-webkit-scrollbar-thumb { background:#2a303c; border-radius:6px;
-         border:2px solid transparent; background-clip:content-box; }
-  ::-webkit-scrollbar-thumb:hover { background:#39414f; background-clip:content-box; }
+  ::-webkit-scrollbar-thumb { background:#2c313c; border-radius:6px;
+    border:2px solid transparent; background-clip:content-box; }
+  ::-webkit-scrollbar-thumb:hover { background:#3a4150; background-clip:content-box; }
 
-  #side { flex:0 0 268px; border-right:1px solid var(--line);
-          background:rgba(10,12,17,.6); backdrop-filter:blur(6px);
-          padding:16px 14px; overflow-y:auto; display:flex;
-          flex-direction:column; gap:9px; }
-  #side h1 { font-size:12px; letter-spacing:.14em; text-transform:uppercase;
-          color:var(--muted); margin:0 2px 6px; font-weight:600; }
-  #up-btn { width:100%; }
-  .sess { padding:11px 13px; background:var(--panel); border:1px solid var(--line);
-          border-radius:11px; cursor:pointer; font-size:13px; transition:.12s; }
-  .sess:hover { border-color:var(--line-hi); background:var(--panel-2);
-          transform:translateY(-1px); }
-  .sess.active { border-color:var(--accent);
-          box-shadow:0 0 0 1px var(--accent), 0 4px 16px -6px var(--accent); }
-  .sess .meta { color:var(--dim); font-size:12px; margin-top:3px; }
-
-  #main { flex:1; display:flex; min-width:0; }
-  #left { flex:1 1 65%; display:flex; flex-direction:column; padding:22px; min-width:0; }
-  video { width:100%; max-height:70vh; background:#000; border-radius:14px;
-          box-shadow:0 18px 50px -20px rgba(0,0,0,.8); }
-  #bar { position:relative; height:12px; margin:16px 2px 0;
-         background:#1c212b; border:1px solid var(--line); border-radius:7px;
-         cursor:pointer; }
-  #bar .mk { position:absolute; top:-3px; min-width:4px; height:16px;
-             background:var(--red); border-radius:3px; cursor:pointer; opacity:.8;
-             box-shadow:0 0 0 1px rgba(0,0,0,.3); transition:.1s; }
-  #bar .mk:hover { opacity:1; box-shadow:0 0 10px var(--red); }
-  #bar .ph { position:absolute; top:-4px; width:2px; height:18px;
-             background:#fff; border-radius:1px; pointer-events:none;
-             box-shadow:0 0 4px rgba(0,0,0,.6); }
-  #right { flex:1 1 35%; max-width:480px; overflow-y:auto; padding:22px;
-           border-left:1px solid var(--line); }
-  h2 { margin:0 0 14px; font-size:13px; letter-spacing:.06em;
-           text-transform:uppercase; color:var(--muted); font-weight:600; }
-
-  .bug { padding:13px 15px; margin-bottom:10px; background:var(--panel);
-         border:1px solid var(--line); border-radius:12px; cursor:pointer;
-         transition:.12s; }
-  .bug:hover { border-color:var(--line-hi); background:var(--panel-2); }
-  .bug.active { border-color:var(--red); background:#1c1416;
-         box-shadow:0 0 0 1px var(--red), 0 6px 20px -10px var(--red); }
-  .bug .t { color:#ff9a9d; font-variant-numeric:tabular-nums; font-size:12px;
-         font-weight:600; letter-spacing:.02em; }
-  .bug .n { font-weight:650; margin:3px 0 8px; font-size:14.5px; }
-  .bug dl { margin:8px 0 0; font-size:13px; color:#cbd1da; }
-  .bug dt { color:var(--dim); margin-top:8px; font-size:11px;
-         text-transform:uppercase; letter-spacing:.05em; }
-  .bug dd { margin:2px 0 0; }
-
-  button { background:var(--accent); color:#08122a; border:1px solid transparent;
-           border-radius:9px; padding:8px 14px; cursor:pointer; font-size:13px;
-           font-weight:600; transition:.12s; }
-  button:hover:not(:disabled) { filter:brightness(1.08); transform:translateY(-1px); }
+  button { font:inherit; border:1px solid transparent; border-radius:9px;
+    padding:9px 14px; cursor:pointer; transition:.14s; }
+  button:focus-visible, .bug:focus-visible, .sess:focus-visible, .mk:focus-visible {
+    outline:2px solid var(--accent); outline-offset:2px; }
   button:disabled { opacity:.45; cursor:default; }
-  #up-btn, .bug button { background:var(--panel-2); color:var(--text);
-           border-color:var(--line-hi); font-weight:500; }
-  #up-btn:hover:not(:disabled), .bug button:hover:not(:disabled) {
-           background:#222835; }
-  .push-row { margin-top:10px; display:flex; align-items:center; gap:8px; }
-  .jira-key { color:var(--green); font-size:13px; font-weight:600; }
-  .jira-key a { color:var(--green); }
 
-  #jira-box { margin-top:auto; padding-top:12px; border-top:1px solid var(--line);
-              font-size:12px; color:var(--dim); }
-  #jira-box select { width:100%; margin-top:6px; background:var(--panel);
-              color:var(--text); border:1px solid var(--line); border-radius:8px;
-              padding:7px 8px; }
-  .empty { color:var(--muted); margin:auto; text-align:center; max-width:360px;
-           line-height:1.7; }
-  .err { color:#ff9a9d; font-size:13px; white-space:pre-wrap; text-align:left;
-           background:#1c1416; border:1px solid #3a2226; border-radius:8px;
-           padding:10px 12px; }
-  .badge { font-size:11px; padding:2px 9px; border-radius:20px; margin-left:6px;
-           font-weight:600; vertical-align:middle; }
-  .b-ok { background:rgba(110,231,160,.13); color:var(--green); }
-  .b-no { background:rgba(240,198,116,.13); color:var(--amber); }
-  .b-run { background:rgba(91,157,255,.14); color:var(--accent); }
+  .btn-primary { background:var(--accent); color:var(--accent-ink); font-weight:650; }
+  .btn-primary:hover:not(:disabled) { filter:brightness(1.08); transform:translateY(-1px); }
+  .btn-ghost { background:var(--panel2); color:var(--text); border-color:var(--line2); font-weight:500; }
+  .btn-ghost:hover:not(:disabled) { background:#2a2f3b; transform:translateY(-1px); }
+
+  /* ------------------------------ sidebar ------------------------------ */
+  #side { flex:0 0 286px; display:flex; flex-direction:column; gap:9px;
+    border-right:1px solid var(--line); background:rgba(16,18,22,.72);
+    backdrop-filter:blur(8px); padding:14px; overflow-y:auto; }
+  .brand { display:flex; align-items:center; gap:10px; margin:2px 2px 8px; }
+  .brand-mark { width:9px; height:9px; border-radius:50%; background:var(--accent);
+    box-shadow:0 0 10px var(--accent); flex:none; }
+  .brand-name { font-size:15px; font-weight:750; letter-spacing:-.01em; }
+  .brand-sub { font-size:10.5px; color:var(--dim); text-transform:uppercase;
+    letter-spacing:.16em; margin-top:1px; }
+
+  .eyebrow { font-size:10.5px; color:var(--dim); text-transform:uppercase;
+    letter-spacing:.13em; font-weight:600; margin:10px 2px 4px; }
+  #search { width:100%; background:var(--panel); color:var(--text);
+    border:1px solid var(--line); border-radius:9px; padding:8px 11px; font:13px var(--ui); }
+  #search::placeholder { color:var(--dim); }
+  #search:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+
+  #slist { display:flex; flex-direction:column; gap:7px; min-height:40px; }
+  .sess { padding:10px 12px; background:var(--panel); border:1px solid var(--line);
+    border-radius:11px; cursor:pointer; transition:.13s; }
+  .sess:hover { border-color:var(--line2); background:var(--panel2); transform:translateY(-1px); }
+  .sess.active { border-color:var(--accent);
+    box-shadow:0 0 0 1px var(--accent), 0 4px 16px -8px var(--accent); }
+  .sess .row { display:flex; align-items:center; gap:6px; }
+  .sess .id { font-weight:650; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sess .meta { color:var(--dim); font:12px var(--mono); margin-top:3px; }
+
+  .badge { font-size:10.5px; padding:2px 8px; border-radius:20px; font-weight:650; flex:none; }
+  .b-open { background:var(--accent-soft); color:var(--accent); }
+  .b-pushed { background:rgba(95,211,154,.13); color:var(--green); }
+  .b-pending { background:rgba(152,160,173,.14); color:var(--muted); }
+  .b-run { background:rgba(110,168,255,.15); color:var(--blue); }
+
+  #jira-box { margin-top:auto; border-top:1px solid var(--line); padding-top:10px; font-size:12px; }
+  #jira-box select { width:100%; margin-top:6px; background:var(--panel); color:var(--text);
+    border:1px solid var(--line); border-radius:8px; padding:7px 8px; }
+  .jira-mode { margin-top:4px; color:var(--dim); font-size:12px; }
+
+  /* ------------------------------ main ------------------------------ */
+  #main { flex:1; display:flex; min-width:0; min-height:0; }
+
+  /* --- session view --- */
+  .stage { flex:1 1 66%; min-width:0; display:flex; flex-direction:column; padding:16px 18px 10px; min-height:0; }
+  .stage video { width:100%; max-height:66vh; background:#000; border-radius:14px;
+    box-shadow:0 18px 50px -22px rgba(0,0,0,.85); display:block; }
+  .nowbar { display:flex; align-items:center; gap:8px; margin:10px 4px 2px;
+    min-height:20px; font:12px var(--mono); color:var(--dim); }
+  .now-dot { width:7px; height:7px; border-radius:50%; background:var(--dim); flex:none; transition:.2s; }
+  .nowbar.on .now-dot { background:var(--accent); box-shadow:0 0 8px var(--accent); }
+  .nowbar.on { color:var(--text); }
+  #now-name { color:var(--accent); font-weight:650; }
+  .kbd { margin-left:auto; align-self:flex-end; color:var(--dim); font:10.5px var(--mono); }
+  .timing { font:11px var(--mono); color:var(--dim); margin-top:8px; }
+
+  .tlwrap { position:relative; margin:2px 4px 4px; padding-bottom:20px; }
+  #bar { position:relative; height:28px; cursor:pointer; }
+  #bar .track { position:absolute; left:0; right:0; top:12px; height:4px;
+    background:var(--line); border-radius:3px; }
+  .mk { position:absolute; top:8px; height:13px; min-width:5px; border-radius:3px;
+    background:var(--accent); opacity:.85; cursor:pointer; z-index:2;
+    transition:height .12s, top .12s, opacity .12s, box-shadow .12s, background .12s; }
+  .mk.pushed { background:var(--green); }
+  .mk:hover, .mk.active { height:18px; top:5px; opacity:1;
+    box-shadow:0 0 10px var(--accent); }
+  .mk.pushed:hover, .mk.pushed.active { box-shadow:0 0 10px var(--green); }
+  .ph { position:absolute; top:2px; bottom:2px; width:2px; background:#fff;
+    box-shadow:0 0 6px rgba(255,255,255,.65); pointer-events:none; z-index:3;
+    transition:left .25s linear; }
+  .tick { position:absolute; bottom:2px; transform:translateX(-50%);
+    font:10px var(--mono); color:var(--dim); pointer-events:none; }
+
+  #tip { position:absolute; z-index:20; pointer-events:none; opacity:0;
+    transform:translateY(4px); transition:.12s; background:#0c0e12;
+    border:1px solid var(--line2); border-radius:8px; padding:6px 10px;
+    font-size:12px; box-shadow:0 8px 24px -8px rgba(0,0,0,.7); white-space:nowrap; }
+  #tip.show { opacity:1; transform:translateY(0); }
+  #tip .tt { color:var(--accent); font-family:var(--mono); font-size:11px; }
+
+  /* --- bug rail --- */
+  .rail { flex:0 0 400px; max-width:44vw; border-left:1px solid var(--line);
+    display:flex; flex-direction:column; min-height:0; background:rgba(15,17,21,.5); }
+  .rail-head { padding:16px 16px 10px; border-bottom:1px solid var(--line); }
+  .rail-head h2 { margin:0 0 8px; font-size:12px; font-weight:650; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.12em; display:flex; align-items:center; gap:8px; }
+  .rail-head h2 .n { color:var(--text); font-family:var(--mono); }
+  .chips { display:flex; gap:6px; }
+  .chip { font-size:11px; padding:3px 9px; border-radius:20px; font-weight:600; }
+  .chip.open { background:var(--accent-soft); color:var(--accent); }
+  .chip.pushed { background:rgba(95,211,154,.13); color:var(--green); }
+  #list { flex:1; overflow-y:auto; padding:12px 16px 20px; }
+
+  .bug { padding:12px 14px; margin-bottom:10px; background:var(--panel);
+    border:1px solid var(--line); border-radius:13px; cursor:pointer;
+    border-left:3px solid transparent; transition:border-color .15s, background .15s, box-shadow .15s; }
+  .bug:hover { border-color:var(--line2); background:var(--panel2); }
+  .bug.active { border-left-color:var(--accent); border-color:var(--line2);
+    background:var(--panel2); box-shadow:0 0 0 1px var(--accent-soft), 0 8px 24px -14px rgba(242,163,60,.5); }
+  .bug-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .bug-id { font:12px var(--mono); color:var(--accent); font-weight:650; }
+  .bug-time { font:11.5px var(--mono); color:var(--muted); }
+  .bug-state { margin-left:auto; }
+  .bug .n { font-size:14.5px; font-weight:700; letter-spacing:-.01em; margin:0 0 5px; }
+  .bug .desc { margin:0 0 8px; color:var(--muted); font-size:13px; }
+  .bug dl { margin:0; font-size:12.5px; }
+  .bug dl > div { margin-top:6px; }
+  .bug dt { color:var(--dim); font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; }
+  .bug dd { margin:2px 0 0; color:var(--text); }
+  .push-row { margin-top:10px; display:flex; align-items:center; gap:8px; }
+  .jira-key { color:var(--green); font:13px var(--mono); font-weight:650; }
+  .jira-key a { color:var(--green); text-decoration:none; }
+  .jira-key a:hover { text-decoration:underline; }
+
+  /* --- state cards (empty / analyzing / error) --- */
+  .statecard { margin:auto; text-align:center; max-width:420px; padding:28px 26px;
+    background:var(--panel); border:1px solid var(--line); border-radius:16px; line-height:1.7; }
+  .statecard .ico { font-size:30px; margin-bottom:8px; }
+  .statecard h3 { margin:0 0 6px; font-size:16px; }
+  .statecard p { color:var(--muted); font-size:13px; margin:0 0 14px; }
+  .err { color:var(--red); font-size:12.5px; white-space:pre-wrap; text-align:left;
+    background:rgba(255,107,107,.07); border:1px solid rgba(255,107,107,.25);
+    border-radius:9px; padding:9px 11px; margin-bottom:12px; }
+  .spinner { width:26px; height:26px; margin:0 auto 10px; border-radius:50%;
+    border:3px solid var(--line2); border-top-color:var(--accent); animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* --- responsive --- */
+  @media (max-width: 980px) {
+    body { flex-direction:column; overflow:auto; height:auto; min-height:100vh; }
+    #side { flex:none; border-right:none; border-bottom:1px solid var(--line); max-height:42vh; }
+    #main { flex-direction:column; }
+    .stage video { max-height:52vh; }
+    .rail { flex:none; width:auto; max-width:none; border-left:none;
+      border-top:1px solid var(--line); }
+    .kbd { display:none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation:none !important; transition:none !important; }
+    .ph { transition:none; }
+  }
 </style></head><body>
-<div id="side">
-  <h1>Sessions</h1>
-  <button id="up-btn" style="width:100%">⬆ Tải video lên (test)</button>
-  <input id="up-file" type="file" accept="video/mp4,video/*" hidden>
-  <div id="slist"></div>
-  <div id="jira-box">
-    Jira: <span id="jira-mode"></span>
-    <select id="jira-proj"><option value="">(chọn project...)</option></select>
+<aside id="side">
+  <div class="brand">
+    <span class="brand-mark"></span>
+    <div><div class="brand-name">Auto-QA</div><div class="brand-sub">Review & triage</div></div>
   </div>
-</div>
-<div id="main"><div class="empty">Chọn 1 session bên trái</div></div>
+
+  <button id="up-btn" class="btn-primary">⬆ Tải video lên</button>
+  <input id="up-file" type="file" accept="video/mp4,video/*" hidden>
+  <div class="eyebrow">Sessions</div>
+  <input id="search" type="search" placeholder="Tìm theo tên session…" autocomplete="off">
+  <div id="slist"></div>
+
+  <div id="jira-box">
+    <div class="eyebrow">Jira</div>
+    <div class="jira-mode" id="jira-mode"></div>
+    <select id="jira-proj"><option value="">(chọn project…)</option></select>
+  </div>
+</aside>
+<main id="main"><div class="statecard"><div class="ico">🎬</div>
+  <h3>Chọn 1 session ở bên trái</h3>
+  <p>Mở một bản quay để xem lại từng bug. Bấm vào bug để video nhảy đúng thời điểm lỗi.</p>
+</div></main>
 <script>
 const $ = s => document.querySelector(s);
 const api = (p, opt) => fetch('/api' + p, opt).then(async r => {
   if (!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || r.statusText);
   return r.json();
 });
-const fmtT = t => t; // MM:SS đã sẵn định dạng
-let current = null, pollTimer = null;
+const secs = t => { let s = 0; for (const p of t.split(':')) s = s * 60 + +p; return s; };
+let current = null, pollTimer = null, shown = null; // shown = {id, kind}
+let viewState = null; // {v, bugs, cards} của session đang mở
+let sessionsCache = [], searchQ = '';
 
-// ---------------- sessions list ----------------
+// ------------------------------- sessions -------------------------------
+function badgeHtml(s) {
+  if (s.analyzing) return '<span class="badge b-run">đang phân tích…</span>';
+  if (s.analyzed) return `<span class="badge b-open">${s.bug_count} bug</span>`;
+  return '<span class="badge b-pending">chưa phân tích</span>';
+}
 async function loadSessions() {
-  const list = await api('/sessions');
-  $('#slist').innerHTML = '';
+  sessionsCache = await api('/sessions');
+  renderSessions();
+}
+function renderSessions() {
+  const q = searchQ;
+  const list = sessionsCache.filter(s => s.id.toLowerCase().includes(q));
+  const el = $('#slist');
+  if (!list.length) {
+    el.innerHTML = `<div style="color:var(--dim);font-size:12px;padding:6px 2px">Không có session.</div>`;
+    return;
+  }
+  el.innerHTML = '';
   for (const s of list) {
-    const el = document.createElement('div');
-    el.className = 'sess' + (s.id === current ? ' active' : '');
-    const badge = s.analyzing ? '<span class="badge b-run">đang phân tích…</span>'
-      : s.analyzed ? `<span class="badge b-ok">${s.bug_count} bug</span>`
-      : '<span class="badge b-no">chưa phân tích</span>';
-    const pushed = s.pushed_count ? ` · ${s.pushed_count} đã push` : '';
-    el.innerHTML = `<div>${s.id} ${badge}</div>
+    const d = document.createElement('div');
+    d.className = 'sess' + (s.id === current ? ' active' : '');
+    d.tabIndex = 0;
+    const pushed = s.pushed_count
+      ? ` · <span style="color:var(--green)">${s.pushed_count} đã push</span>` : '';
+    d.innerHTML = `<div class="row"><span class="id">${s.id}</span>${badgeHtml(s)}</div>
       <div class="meta">${s.size_mb} MB${pushed}</div>`;
-    el.onclick = () => { location.hash = s.id; };
-    $('#slist').appendChild(el);
+    d.onclick = () => location.hash = s.id;
+    d.onkeydown = e => { if (e.key === 'Enter') location.hash = s.id; };
+    el.appendChild(d);
   }
 }
+$('#search').addEventListener('input', e => { searchQ = e.target.value.trim().toLowerCase(); renderSessions(); });
 
-// ---------------- upload video -> session mới -> tự phân tích ----------------
+// ------------------------------- upload ---------------------------------
 $('#up-btn').onclick = () => $('#up-file').click();
 $('#up-file').onchange = async e => {
   const f = e.target.files[0];
   if (!f) return;
   const btn = $('#up-btn');
-  btn.disabled = true; btn.textContent = '⬆ Đang tải lên…';
+  btn.disabled = true; btn.textContent = `⬆ ${f.name}… đang tải`;
   try {
     const fd = new FormData();
     fd.append('file', f);
-    const r = await api('/sessions/upload', {method:'POST', body: fd});
-    await api(`/sessions/${r.id}/analyze`, {method:'POST'}); // xử lý như bình thường
+    const r = await api('/sessions/upload', { method:'POST', body: fd });
+    await api(`/sessions/${r.id}/analyze`, { method:'POST' });
     location.hash = r.id;
     loadSessions();
   } catch (err) { alert('Upload lỗi: ' + err.message); }
-  btn.disabled = false; btn.textContent = '⬆ Tải video lên (test)';
+  btn.disabled = false; btn.textContent = '⬆ Tải video lên';
   e.target.value = '';
 };
 
-// ---------------- jira box ----------------
+// -------------------------------- jira ----------------------------------
 async function loadJira() {
   const s = await api('/jira/settings');
-  $('#jira-mode').textContent = s.mode === 'real'
-    ? `${s.project_key} (thật)` : 'MOCK (chưa cấu hình đủ .env)';
+  $('#jira-mode').innerHTML = s.mode === 'real'
+    ? `Jira: <span class="badge b-pushed">${s.project_key} · thật</span>`
+    : 'Jira: <span class="badge b-open">MOCK</span> — chưa cấu hình .env';
   try {
     const projects = await api('/jira/projects');
     const sel = $('#jira-proj');
-    sel.innerHTML = '<option value="">(chọn project...)</option>';
+    sel.innerHTML = '<option value="">(chọn project…)</option>';
     for (const p of projects) {
       const o = document.createElement('option');
       o.value = p.key; o.textContent = `${p.key} — ${p.name}`;
@@ -174,107 +282,221 @@ async function loadJira() {
     }
     sel.onchange = async () => {
       if (!sel.value) return;
-      await api('/jira/settings', {method:'PUT',
+      await api('/jira/settings', { method:'PUT',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({project_key: sel.value})});
+        body: JSON.stringify({ project_key: sel.value }) });
       loadJira();
     };
   } catch (e) { /* chưa có credentials -> giữ mock */ }
 }
 
-// ---------------- session view ----------------
-function secs(t){ let s=0; for (const p of t.split(':')) s = s*60 + +p; return s; }
-
+// ----------------------------- session view -----------------------------
 async function openSession(id) {
   current = id;
   clearInterval(pollTimer);
+  viewState = null; // bỏ tham chiếu session cũ khi chuyển
   const data = await api('/sessions/' + id);
   loadSessions();
-  const main = $('#main');
 
   if (data.analyzing) {
-    main.innerHTML = '<div class="empty">⏳ Đang phân tích bằng Gemini (vài phút)…</div>';
+    if (shown && shown.id === id && shown.kind === 'analyzing') {
+      pollTimer = setInterval(() => openSession(id), 4000); // giữ nguyên màn hình, tránh nhấp nháy
+      return;
+    }
+    shown = { id, kind: 'analyzing' };
+    $('#main').innerHTML = `<div class="statecard"><div class="spinner"></div>
+      <h3>Đang phân tích bằng Gemini</h3>
+      <p>Chạy mô hình nhận diện lỗi từ video — thường vài phút. Trang sẽ tự cập nhật khi xong.</p></div>`;
     pollTimer = setInterval(() => openSession(id), 4000);
     return;
   }
   if (!data.bugs) {
-    main.innerHTML = `<div class="empty">
-      Session chưa được phân tích.<br><br>
-      ${data.error ? `<div class="err">Lỗi lần trước: ${data.error}</div><br>` : ''}
-      <button id="an">Phân tích bằng Gemini</button></div>`;
+    shown = { id, kind: 'empty' };
+    $('#main').innerHTML = `<div class="statecard"><div class="ico">🔍</div>
+      <h3>Session chưa được phân tích</h3>
+      ${data.error ? `<div class="err">Lỗi lần trước: ${data.error}</div>` : ''}
+      <p>Gửi video này cho Gemini để tách danh sách lỗi kèm thời điểm.</p>
+      <button id="an" class="btn-primary">Phân tích bằng Gemini</button></div>`;
     $('#an').onclick = async () => {
-      await api(`/sessions/${id}/analyze`, {method:'POST'});
+      await api(`/sessions/${id}/analyze`, { method:'POST' });
       openSession(id);
     };
     return;
   }
 
+  shown = { id, kind: 'session' };
   const vsrc = `/api/sessions/${id}/files/${data.video}`;
-  main.innerHTML = `
-    <div id="left"><video id="v" controls src="${vsrc}"></video><div id="bar"></div></div>
-    <div id="right"><h2>Bugs (${data.bugs.length})</h2>
-      ${data.timing ? `<div style="font-size:12px;color:#7f8794;margin:-8px 0 10px">
-        nén ${data.timing.compress_s}s · Gemini ${data.timing.gemini_s}s
-        · bản AI ${data.timing.ai_size_mb} MB</div>` : ''}
-      <div id="list"></div></div>`;
-  const v = $('#v'), bar = $('#bar'), list = $('#list');
-  const bugs = data.bugs.map(b => ({...b, _start: secs(b.start_time),
-    _end: b.end_time ? secs(b.end_time) : null}));
+  const timing = data.timing;
+  $('#main').innerHTML = `
+    <div class="stage">
+      <video id="v" controls preload="metadata" src="${vsrc}"></video>
+      <div class="nowbar" id="nowbar"><span class="now-dot"></span><span id="now-txt">—:—</span></div>
+      <div class="tlwrap"><div id="bar"><div class="track"></div></div><div id="tip"></div></div>
+      <span class="kbd">Space phát/dừng · J/K chuyển bug</span>
+    </div>
+    <div class="rail">
+      <div class="rail-head">
+        <h2>Bugs <span class="n" id="bug-count"></span></h2>
+        <div class="chips">
+          <span class="chip open" id="chip-open"></span>
+          <span class="chip pushed" id="chip-pushed"></span>
+        </div>
+        ${timing ? `<div class="timing">nén ${timing.compress_s}s · Gemini ${timing.gemini_s}s · bản AI ${timing.ai_size_mb} MB</div>` : ''}
+      </div>
+      <div id="list"></div>
+    </div>`;
 
-  const cards = bugs.map((b, i) => {
-    const el = document.createElement('div');
-    el.className = 'bug';
+  const v = $('#v'), bar = $('#bar'), list = $('#list'), now = $('#nowbar'), tip = $('#tip');
+  $('#bug-count').textContent = data.bugs.length;
+  const pushedN = data.bugs.filter(b => b.jira_key).length;
+  $('#chip-open').textContent = `${data.bugs.length - pushedN} mở`;
+  $('#chip-pushed').textContent = `${pushedN} đã push`;
+
+  const bugs = data.bugs.map((b, i) => ({ ...b, i,
+    _start: secs(b.start_time), _end: b.end_time ? secs(b.end_time) : null }));
+  let cards = [], markers = [], lastActive = -1;
+
+  // bug cards
+  bugs.forEach((b, i) => {
+    const el = document.createElement('article');
+    el.className = 'bug'; el.tabIndex = 0;
     const rng = b.start_time + (b.end_time ? ' – ' + b.end_time : '');
-    el.innerHTML = `<div class="t">${rng}</div><div class="n">${i+1}. ${b.name}</div>
-      <dl><dd>${b.description}</dd>
-      <dt>Actual</dt><dd>${b.actual_result}</dd>
-      <dt>Expected</dt><dd>${b.expected_result}</dd></dl>
+    const state = b.jira_key
+      ? `<span class="bug-state"><span class="badge b-pushed">✓ push</span></span>`
+      : '<span class="bug-state"><span class="badge b-open">mở</span></span>';
+    el.innerHTML = `<div class="bug-top">
+        <span class="bug-id">#${String(i+1).padStart(2,'0')}</span>
+        <span class="bug-time">${rng}</span>${state}</div>
+      <h3 class="n">${b.name}</h3>
+      <p class="desc">${b.description}</p>
+      <dl>
+        <div><dt>Actual</dt><dd>${b.actual_result}</dd></div>
+        <div><dt>Expected</dt><dd>${b.expected_result}</dd></div>
+      </dl>
       <div class="push-row"></div>`;
     el.onclick = () => { v.currentTime = b._start; v.play(); };
+    el.onkeydown = e => { if (e.key === 'Enter') { v.currentTime = b._start; v.play(); } };
     renderPush(el.querySelector('.push-row'), id, i, b);
     list.appendChild(el);
-    return el;
+    cards.push(el);
   });
 
+  // film-strip timeline + ticks
   v.addEventListener('loadedmetadata', () => {
+    const dur = v.duration || 1;
     for (const b of bugs) {
       const mk = document.createElement('div');
-      mk.className = 'mk';
-      const end = b._end ?? b._start;
-      mk.style.left = (b._start / v.duration * 100) + '%';
-      mk.style.width = ((end - b._start) / v.duration * 100) + '%';
-      mk.title = b.name;
+      mk.className = 'mk' + (b.jira_key ? ' pushed' : '');
+      mk.style.left = (b._start / dur * 100) + '%';
+      mk.style.width = Math.max(0.5, ((b._end ?? b._start + 4) - b._start) / dur * 100) + '%';
       mk.onclick = e => { e.stopPropagation(); v.currentTime = b._start; v.play(); };
+      mk.addEventListener('mouseenter', e => showTip(e, b));
+      mk.addEventListener('mousemove', e => moveTip(e));
+      mk.addEventListener('mouseleave', hideTip);
       bar.appendChild(mk);
+      markers.push(mk);
+    }
+    // vạch thời gian mono
+    const step = Math.max(30, Math.round(dur / 8 / 30) * 30);
+    for (let t = 0; t < dur; t += step) {
+      const tick = document.createElement('div');
+      tick.className = 'tick';
+      tick.style.left = (t / dur * 100) + '%';
+      tick.textContent = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}`;
+      bar.appendChild(tick);
     }
   });
+
+  function rngOf(b) {
+    return b.start_time + (b.end_time ? ' – ' + b.end_time : '');
+  }
+  function showTip(e, b) {
+    tip.innerHTML = `<span class="tt">#${String(b.i+1).padStart(2,'0')}</span> ${b.name} · <span class="tt">${rngOf(b)}</span>`;
+    tip.classList.add('show');
+    moveTip(e);
+  }
+  function moveTip(e) {
+    const r = bar.getBoundingClientRect();
+    tip.style.left = Math.min(Math.max(0, e.clientX - r.left - 40), r.width - 120) + 'px';
+    tip.style.top = '-8px';
+  }
+  function hideTip() { tip.classList.remove('show'); }
+
+  // seek trên timeline
   bar.addEventListener('click', e => {
-    if (v.duration) v.currentTime = (e.offsetX / bar.clientWidth) * v.duration;
+    if (e.target !== bar && !e.target.classList.contains('track')) return;
+    const r = bar.getBoundingClientRect();
+    if (v.duration) v.currentTime = (e.clientX - r.left) / r.width * v.duration;
   });
+
+  // playhead + đồng bộ bug đang phát
   const ph = document.createElement('div');
-  ph.className = 'ph';
-  bar.appendChild(ph);
+  ph.className = 'ph'; bar.appendChild(ph);
   v.addEventListener('timeupdate', () => {
     const t = v.currentTime;
     if (v.duration) ph.style.left = (t / v.duration * 100) + '%';
-    bugs.forEach((b, i) => cards[i].classList.toggle('active',
-      t >= b._start && t <= (b._end ?? b._start + 5)));
+    let act = -1;
+    for (const b of bugs) {
+      if (t >= b._start && t <= (b._end ?? b._start + 5)) { act = b.i; break; }
+    }
+    const nowTxt = $('#now-txt');
+    if (act >= 0) {
+      now.classList.add('on');
+      nowTxt.innerHTML = `bug <span id="now-name">#${String(act+1).padStart(2,'0')}</span>
+        <span style="color:var(--muted)">· ${bugs[act].start_time}${bugs[act].end_time ? '–' + bugs[act].end_time : ''} · ${bugs[act].name}</span>`;
+      markers.forEach((m, i) => m.classList.toggle('active', i === act));
+      if (act !== lastActive) {
+        cards[act].scrollIntoView({ block:'nearest', behavior:'smooth' });
+        lastActive = act;
+      }
+    } else {
+      now.classList.remove('on');
+      nowTxt.textContent = '—:—';
+      markers.forEach(m => m.classList.remove('active'));
+    }
   });
+
+  viewState = { v, bugs, cards };
+}
+
+// phím tắt toàn cục — 1 listener duy nhất, đọc viewState
+document.addEventListener('keydown', e => {
+  if (!viewState) return;
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (['input','select','textarea','video'].includes(tag) || e.target.isContentEditable) return;
+  const { v } = viewState;
+  if (e.code === 'Space') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
+  else if (e.key === 'j') jumpBug(viewState, 1);
+  else if (e.key === 'k') jumpBug(viewState, -1);
+});
+function jumpBug(vs, dir) {
+  const { v, bugs, cards } = vs;
+  if (!v.duration) return;
+  const t = v.currentTime;
+  let cand = bugs[0]._start, candI = 0;
+  if (dir > 0) {
+    for (const b of bugs) if (b._start > t + .3) { cand = b._start; candI = b.i; break; }
+  } else {
+    for (let i = bugs.length - 1; i >= 0; i--) if (bugs[i]._start < t - .3) { cand = bugs[i]._start; candI = bugs[i].i; break; }
+  }
+  v.currentTime = cand; v.play();
+  cards[candI].scrollIntoView({ block:'nearest', behavior:'smooth' });
 }
 
 function renderPush(row, sid, i, b) {
   if (b.jira_key) {
     row.innerHTML = `<span class="jira-key">✓ ${b.jira_url
-      ? `<a href="${b.jira_url}" target="_blank">${b.jira_key}</a>` : b.jira_key}</span>`;
+      ? `<a href="${b.jira_url}" target="_blank" rel="noopener">${b.jira_key}</a>` : b.jira_key}</span>`;
     return;
   }
   const btn = document.createElement('button');
+  btn.className = 'btn-ghost';
   btn.textContent = 'Push to Jira';
   btn.onclick = async e => {
     e.stopPropagation();
     btn.disabled = true; btn.textContent = 'Đang push…';
     try {
-      const res = await api(`/sessions/${sid}/bugs/${i}/push`, {method:'POST'});
+      const res = await api(`/sessions/${sid}/bugs/${i}/push`, { method:'POST' });
       b.jira_key = res.key; b.jira_url = res.url;
       renderPush(row, sid, i, b);
       loadSessions();
@@ -286,7 +508,7 @@ function renderPush(row, sid, i, b) {
   row.appendChild(btn);
 }
 
-// ---------------- boot ----------------
+// --------------------------------- boot ---------------------------------
 window.addEventListener('hashchange', () => {
   const id = location.hash.slice(1);
   if (id) openSession(id);

@@ -110,7 +110,7 @@ class RegionPicker:
             return
         self.top.geometry(f"{w}x{h}+{r.left}+{r.top}")
         self.canvas.delete("all")
-        self.canvas.create_rectangle(1, 1, w - 2, h - 2, outline="red", width=3)
+        self.canvas.create_rectangle(1, 1, w - 2, h - 2, outline="#f2a33c", width=2)
 
     def select(self):
         if not self.ctrl:
@@ -335,63 +335,134 @@ class App:
         self.screen_rect = None
         self.stop_evt = None
         self.outdir = None
+        self.rec_start = 0.0
         self.meter = MicMeter()
 
         r = self.root = tk.Tk()
-        r.title("QA Recorder")
+        r.title("Auto-QA Recorder")
         r.attributes("-topmost", True)
         r.resizable(False, False)
+        r.configure(bg="#16181d")
         try:
             import sv_ttk
             sv_ttk.set_theme("dark")  # ponytail: theme Win11, không có thì dùng ttk mặc định
         except ImportError:
             pass
-        pad = {"padx": 12, "pady": 6}
 
-        ttk.Label(r, text="1. Vùng quay").grid(row=0, column=0, sticky="w", **pad)
-        self.region_lbl = ttk.Label(r, text="Toàn màn hình (chưa chọn)", width=44)
-        self.region_lbl.grid(row=0, column=1, sticky="w", **pad)
-        ttk.Button(r, text="Chọn (F8 chọn / Esc hủy)",
-                   command=self.pick).grid(row=0, column=2, **pad)
+        style = ttk.Style()
+        C = {"accent": "#f2a33c", "accent_hi": "#ffc46b", "accent_ink": "#241a06",
+             "danger": "#ff6b6b", "danger_hi": "#ff8a8a", "danger_ink": "#2a0d0d",
+             "green": "#5fd39a", "muted": "#98a0ad", "dim": "#6c7482", "text": "#e9ebef"}
+        self.C = C
+        # nút chính hổ phách / nút danger lúc đang quay (dựa trên Accent.TButton của sv-ttk)
+        style.configure("Accent.TButton", background=C["accent"], foreground=C["accent_ink"])
+        style.map("Accent.TButton",
+                  background=[("pressed", C["accent_hi"]), ("active", C["accent_hi"])])
+        style.configure("Danger.TButton", background=C["danger"], foreground=C["danger_ink"])
+        style.map("Danger.TButton",
+                  background=[("pressed", C["danger_hi"]), ("active", C["danger_hi"])])
+        style.configure("Section.TLabel", foreground=C["dim"],
+                        font=("Segoe UI", 9, "bold"))
+        style.configure("Muted.TLabel", foreground=C["muted"])
+        style.configure("Dim.TLabel", foreground=C["dim"])
+        style.configure("Mono.TLabel", foreground=C["text"], font=("Consolas", 11))
 
-        ttk.Label(r, text="2. Mic").grid(row=1, column=0, sticky="w", **pad)
+        pad = {"padx": 14, "pady": 4}
+        box = {"padx": 14, "pady": 3}
+
+        # ---- header ----
+        top = ttk.Frame(r)
+        top.pack(fill="x", padx=14, pady=(12, 2))
+        ttk.Label(top, text="●", foreground=C["accent"],
+                  font=("Segoe UI", 11)).pack(side="left")
+        ttk.Label(top, text="Auto-QA Recorder",
+                  font=("Segoe UI", 13, "bold")).pack(side="left", padx=(6, 0))
+        ttk.Label(top, text="quay · phân tích · push Jira",
+                  font=("Segoe UI", 9), foreground=C["dim"]).pack(
+            side="left", padx=(12, 0), pady=(3, 0))
+
+        body = ttk.Frame(r)
+        body.pack(fill="both", expand=True, padx=8, pady=(0, 10))
+        body.columnconfigure(0, weight=1)
+
+        # ---- 1 · vùng quay ----
+        ttk.Label(body, text="1 · VÙNG QUAY",
+                  style="Section.TLabel").grid(row=0, column=0, sticky="w", **pad)
+        self.region_lbl = tk.Label(body, text="Toàn màn hình (chưa chọn)",
+                                   font=("Consolas", 10), fg=C["muted"], bg="#20242c",
+                                   anchor="w", padx=10, pady=6, relief="flat")
+        self.region_lbl.grid(row=1, column=0, sticky="ew", **box)
+        ttk.Button(body, text="Chọn vùng  (F8 chọn · Esc hủy)",
+                   command=self.pick).grid(row=1, column=1, sticky="e", **box)
+
+        # ---- 2 · mic ----
+        ttk.Label(body, text="2 · MIC",
+                  style="Section.TLabel").grid(row=2, column=0, sticky="w", **pad)
         self.mics = list_audio_devices(self.ff)
         self.mic_var = tk.StringVar(value=self.mics[0] if self.mics else "(không có mic)")
-        cb = ttk.Combobox(r, textvariable=self.mic_var, values=self.mics,
-                          state="readonly", width=42)
-        cb.grid(row=1, column=1, sticky="w", **pad)
+        microw = ttk.Frame(body)
+        microw.grid(row=3, column=0, columnspan=2, sticky="ew", **box)
+        cb = ttk.Combobox(microw, textvariable=self.mic_var, values=self.mics,
+                          state="readonly")
+        cb.pack(side="left", fill="x", expand=True)
         cb.bind("<<ComboboxSelected>>", lambda e: self.start_meter())
-        self.vu = ttk.Progressbar(r, maximum=100, length=150)
-        self.vu.grid(row=1, column=2, **pad)
+        # VU bar vẽ bằng canvas — sv-ttk dựng Progressbar bằng ảnh sprite cố định,
+        # không đổi màu fill được nên tự vẽ, đổi màu theo mức trong tick()
+        self.vu = tk.Canvas(microw, width=140, height=16, bg="#14161b",
+                            highlightthickness=1, highlightbackground="#2a2f3a", bd=0)
+        self.vu.pack(side="left", fill="x", expand=True, padx=(8, 0))
 
-        self.rec_btn = ttk.Button(r, text="●  Bắt đầu quay", command=self.toggle)
-        self.rec_btn.grid(row=2, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
-
-        self.an_btn = ttk.Button(r, text="Phân tích (Gemini) + mở review",
+        # ---- actions ----
+        self.rec_btn = ttk.Button(body, text="●  Bắt đầu quay", style="Accent.TButton",
+                                  command=self.toggle)
+        self.rec_btn.grid(row=4, column=0, columnspan=2, sticky="ew",
+                          padx=14, pady=(12, 2))
+        self.an_btn = ttk.Button(body, text="Phân tích (Gemini) + mở review",
                                  command=self.analyze, state="disabled")
-        self.an_btn.grid(row=3, column=0, columnspan=3, sticky="ew", padx=10)
+        self.an_btn.grid(row=5, column=0, columnspan=2, sticky="ew", padx=14, pady=2)
+        ttk.Button(body, text="Xem sessions (review + push Jira)",
+                   command=self.open_review).grid(
+            row=6, column=0, columnspan=2, sticky="ew", padx=14, pady=(2, 4))
 
-        ttk.Button(r, text="Xem sessions (review + push Jira)",
-                   command=self.open_review).grid(row=5, column=0, columnspan=3,
-                                                  sticky="ew", padx=10, pady=(0, 4))
+        ttk.Separator(body).grid(row=7, column=0, columnspan=2, sticky="ew",
+                                 padx=10, pady=(6, 2))
 
+        # ---- status + thời gian quay ----
+        statrow = ttk.Frame(body)
+        statrow.grid(row=8, column=0, columnspan=2, sticky="ew", padx=14, pady=(2, 4))
         self.status_var = tk.StringVar(value="Sẵn sàng.")
-        ttk.Label(r, textvariable=self.status_var, foreground="#666",
-                  wraplength=560).grid(row=4, column=0, columnspan=3, sticky="w", **pad)
+        self.status_color = C["muted"]
+        self.status_lbl = ttk.Label(statrow, textvariable=self.status_var,
+                                    style="Muted.TLabel", wraplength=520)
+        self.status_lbl.pack(side="left", fill="x", expand=True)
+        self.elapsed_var = tk.StringVar(value="—:—")
+        ttk.Label(statrow, textvariable=self.elapsed_var,
+                  style="Mono.TLabel").pack(side="right")
 
         if self.mics:
             self.start_meter()
         else:
-            self.status("CẢNH BÁO: không thấy mic — sẽ quay video-only.")
+            self.status("CẢNH BÁO: không thấy mic — sẽ quay video-only.", color=C["accent"])
         self.tick()
         r.protocol("WM_DELETE_WINDOW", self.quit)
 
     # -- helpers --
-    def status(self, msg):
+    def status(self, msg, color=None):
+        self.status_color = color or "#98a0ad"
         self.root.after(0, self.status_var.set, msg)
+        self.root.after(0, lambda: self.status_lbl.configure(foreground=self.status_color))
 
     def tick(self):
-        self.vu["value"] = min(100, self.meter.level * 600)
+        lvl = min(100, self.meter.level * 600)
+        w = self.vu.winfo_width() - 2
+        col = (self.C["danger"] if lvl >= 85 else
+               self.C["accent"] if lvl >= 55 else self.C["green"])
+        self.vu.delete("all")
+        self.vu.create_rectangle(1, 1, max(2, 1 + int((w - 2) * lvl / 100)), 15,
+                                 fill=col, width=0)
+        if self.stop_evt:  # đang quay -> đếm giờ
+            el = int(time.monotonic() - self.rec_start)
+            self.elapsed_var.set(f"{el // 60:02d}:{el % 60:02d}")
         self.root.after(50, self.tick)
 
     def start_meter(self):
@@ -409,10 +480,10 @@ class App:
             self.root.deiconify()
             if hwnd:
                 self.hwnd, self.screen_rect = hwnd, rect
-                self.region_lbl.config(text=label)
+                self.region_lbl.config(text=label, fg="#f2a33c")
             else:
                 self.hwnd = self.screen_rect = None
-                self.region_lbl.config(text="Toàn màn hình")
+                self.region_lbl.config(text="Toàn màn hình", fg="#98a0ad")
 
         RegionPicker(self.root, done)
 
@@ -421,7 +492,8 @@ class App:
         if self.stop_evt:  # đang quay -> dừng
             self.stop_evt.set()
             self.stop_evt = None
-            self.rec_btn.config(text="●  Bắt đầu quay")
+            self.rec_btn.config(text="●  Bắt đầu quay", style="Accent.TButton")
+            self.elapsed_var.set("—:—")
             self.an_btn.config(state="normal")
             return
         self.outdir = SESSIONS / datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -430,11 +502,12 @@ class App:
         audio = mic if mic and "không có" not in mic else None
         self.meter.stop()  # nhả mic cho ffmpeg
         self.stop_evt = threading.Event()
+        self.rec_start = time.monotonic()
         threading.Thread(target=record_session,
                          args=(self.ff, self.hwnd, self.screen_rect, audio,
                                self.outdir, self.stop_evt, self.status),
                          daemon=True).start()
-        self.rec_btn.config(text="■  Dừng")
+        self.rec_btn.config(text="■  Dừng quay", style="Danger.TButton")
         self.an_btn.config(state="disabled")
 
     # -- review server (server.py chạy nền trong app) --
@@ -462,15 +535,17 @@ class App:
 
         def work():
             import pipeline
-            self.status("Đang upload + phân tích bằng Gemini (vài phút)...")
+            self.status("Đang upload + phân tích bằng Gemini (vài phút)...",
+                        color="#6ea8ff")
             try:
                 data = pipeline.analyze_session(outdir)
             except Exception as e:
-                self.status(f"Phân tích lỗi: {str(e)[-300:]}")
+                self.status(f"Phân tích lỗi: {str(e)[-300:]}", color="#ff6b6b")
                 self.root.after(0, self.an_btn.config, {"state": "normal"})
                 return
             self.root.after(0, self.open_review, outdir.name)
-            self.status(f"Xong — {len(data['bugs'])} bug. Review + push Jira trong trình duyệt.")
+            self.status(f"Xong — {len(data['bugs'])} bug. Review + push Jira trong trình duyệt.",
+                        color="#5fd39a")
             self.root.after(0, self.an_btn.config, {"state": "normal"})
 
         threading.Thread(target=work, daemon=True).start()
