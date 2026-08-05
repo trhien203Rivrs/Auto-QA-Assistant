@@ -1,19 +1,21 @@
-"""QA Recorder — app nhỏ chạy trọn pipeline: quay -> phân tích -> review.
+"""QA Recorder — a small app running the whole pipeline: record -> analyze -> review.
 
 Flow:
-  1. "Chọn vùng quay": rê chuột, viền đỏ bám theo phần tử UI (như capture_tool).
-     F8 = chọn, Esc = hủy. Chọn phần tử -> quay CỬA SỔ chứa nó bằng WGC
-     (bám theo cửa sổ khi di chuyển, quay được GPU/Roblox, không sợ bị che);
-     nếu phần tử nhỏ hơn cửa sổ thì crop đúng vùng đó bên trong cửa sổ.
-  2. Chọn mic (dropdown, mặc định mic đầu tiên) — thanh VU rung là audio OK.
-  3. Bắt đầu -> chơi + nói bug -> Dừng. Ghi session.mp4 vào sessions/<time>/.
-     (bản nhẹ session.ai.mp4 gửi Gemini được nén lúc bấm Phân tích — pipeline.py)
-  4. "Phân tích": chạy bug_report.py trên bản AI (batch), rồi make_review.py
-     trên bản gốc -> tự mở trang review (timeline + click nhảy tới bug).
+  1. "Pick area": move the mouse, a red outline tracks the UI element under it
+     (like capture_tool). F8 = select, Esc = cancel. Picking an element records
+     the WINDOW that contains it via WGC (tracks the window as it moves,
+     captures GPU/Roblox content, unaffected by other windows covering it);
+     if the element is smaller than the window, it crops to that area inside it.
+  2. Pick a mic (dropdown, defaults to the first one) — a moving VU bar means audio is OK.
+  3. Start -> play + narrate the bug -> Stop. Writes session.mp4 to sessions/<time>/.
+     (the lightweight session.ai.mp4 sent to Gemini is compressed when you click
+     Analyze — pipeline.py)
+  4. "Analyze": runs bug_report.py on the AI copy (batched), then make_review.py
+     on the original -> auto-opens the review page (timeline + click jumps to a bug).
 
-Chạy: python qa_app.py
-Cần:  pip install uiautomation sounddevice  (ngoài requirements sẵn có)
-Env:  AI_FPS (mặc định 1), AI_HEIGHT (mặc định 480)
+Run: python qa_app.py
+Needs: pip install uiautomation sounddevice  (on top of requirements.txt)
+Env:  AI_FPS (default 1), AI_HEIGHT (default 480)
 """
 import ctypes
 import ctypes.wintypes
@@ -34,18 +36,18 @@ from tkinter import ttk
 from dotenv import load_dotenv
 
 load_dotenv()
-ctypes.windll.shcore.SetProcessDpiAwareness(2)  # tọa độ thật trên màn hình scale
+ctypes.windll.shcore.SetProcessDpiAwareness(2)  # real coordinates on a scaled display
 sys.stdout.reconfigure(encoding="utf-8")
 
 from record import find_ffmpeg  # noqa: E402
 
-REC_CRF = os.environ.get("REC_CRF", "28")  # nén bản gốc: cao hơn = nhẹ hơn (18–30 hợp lý)
-REC_FPS = os.environ.get("REC_FPS", "20")  # fps bản gốc (bản AI: AI_FPS trong pipeline.py)
+REC_CRF = os.environ.get("REC_CRF", "28")  # original-copy compression: higher = lighter (18–30 reasonable)
+REC_FPS = os.environ.get("REC_FPS", "20")  # original-copy fps (AI copy uses AI_FPS in pipeline.py)
 SESSIONS = Path("sessions")
 VK = {"F8": 0x77, "ESC": 0x1B}
 
 # ---------------------------------------------------------------- i18n -----
-# Mặc định tiếng Anh (AQA_LANG=vi để mặc định tiếng Việt); nút EN/VI ở header đổi nhanh.
+# Defaults to English (AQA_LANG=vi to default to Vietnamese); the EN/VI button in the header switches instantly.
 L = {
     "en": {
         "tagline": "record · analyze · push Jira",
@@ -106,7 +108,7 @@ lang = os.environ.get("AQA_LANG", "en").lower()
 
 
 def t(k, **kw):
-    """Tra từ khoá k trong ngôn ngữ hiện tại; có **kw thì format {phần}."""
+    """Look up key k in the current language; if **kw is given, format {placeholders}."""
     d = L.get(lang, L["en"])
     s = d.get(k) or L["en"].get(k) or k
     return s.format(**kw) if kw else s
@@ -127,10 +129,10 @@ def list_audio_devices(ff):
 
 # ---------------------------------------------------------------- picker ----
 class RegionPicker:
-    """Overlay viền đỏ theo phần tử UI dưới chuột. F8 chọn, Esc hủy.
+    """Red-outline overlay tracking the UI element under the mouse. F8 selects, Esc cancels.
 
-    Gọi on_done(hwnd, screen_rect_or_None, label) — screen_rect=None nghĩa là
-    phần tử chính là cả cửa sổ.
+    Calls on_done(hwnd, screen_rect_or_None, label) — screen_rect=None means
+    the element itself is the whole window.
     """
 
     def __init__(self, root, on_done):
@@ -147,7 +149,7 @@ class RegionPicker:
         self.top.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(self.top.winfo_id()) or self.top.winfo_id()
         style = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
-        ctypes.windll.user32.SetWindowLongW(hwnd, -20, style | 0x80000 | 0x20)  # click-through
+        ctypes.windll.user32.SetWindowLongW(hwnd, -20, style | 0x80000 | 0x20)  # click-through overlay
         self.poll()
 
     def poll(self):
@@ -188,7 +190,7 @@ class RegionPicker:
             er, tr = self.ctrl.BoundingRectangle, top.BoundingRectangle
         except Exception:
             return self.finish(None, None, None)
-        # phần tử ~ cả cửa sổ (chênh <8px mỗi cạnh) -> quay cả cửa sổ, khỏi crop
+        # element ~ whole window (< 8px off on each edge) -> record the whole window, no crop
         same = all(abs(a - b) < 8 for a, b in
                    [(er.left, tr.left), (er.top, tr.top),
                     (er.right, tr.right), (er.bottom, tr.bottom)])
@@ -202,8 +204,8 @@ class RegionPicker:
 
 
 def screen_to_frame_crop(hwnd, screen_rect, fw, fh):
-    """Đổi rect màn hình -> rect trong frame WGC của cửa sổ (frame có thể là
-    client area hoặc cả cửa sổ tùy hệ — so kích thước để biết gốc tọa độ)."""
+    """Convert a screen rect -> a rect in the window's WGC frame (the frame may be
+    the client area or the whole window depending on the system — compare sizes to find the origin)."""
     u = ctypes.windll.user32
     wr = ctypes.wintypes.RECT()
     u.GetWindowRect(hwnd, ctypes.byref(wr))
@@ -214,7 +216,7 @@ def screen_to_frame_crop(hwnd, screen_rect, fw, fh):
     if abs(fw - cr.right) <= 2 and abs(fh - cr.bottom) <= 2:
         ox, oy = pt.x, pt.y          # frame = client area
     else:
-        ox, oy = wr.left, wr.top     # frame = cả cửa sổ
+        ox, oy = wr.left, wr.top     # frame = whole window
     x, y, w, h = screen_rect
     x, y = max(0, x - ox), max(0, y - oy)
     w, h = min(w, fw - x), min(h, fh - y)
@@ -223,10 +225,10 @@ def screen_to_frame_crop(hwnd, screen_rect, fw, fh):
 
 # -------------------------------------------------------------- recorder ----
 def _finalize_mp4(ff, path):
-    """Remux frag mp4 -> mp4 chuẩn +faststart: mvhd có duration thật.
+    """Remux fragmented mp4 -> standard +faststart mp4: mvhd gets a real duration.
 
-    File fragmented có mvhd duration=0 nên mỗi player tự đoán độ dài một kiểu
-    (web vs Media Player kết thúc khác nhau). Remux copy-only, chạy ~1 giây.
+    A fragmented file has mvhd duration=0 so each player guesses the length
+    differently (web vs Media Player end differently). Copy-only remux, takes ~1 second.
     """
     tmp = path.with_suffix(".fix.mp4")
     r = subprocess.run([ff, "-y", "-i", str(path), "-c", "copy",
@@ -234,35 +236,36 @@ def _finalize_mp4(ff, path):
     if r.returncode == 0 and tmp.exists() and tmp.stat().st_size > 0:
         tmp.replace(path)
     else:
-        tmp.unlink(missing_ok=True)  # remux hỏng thì giữ bản frag còn xem được
+        tmp.unlink(missing_ok=True)  # remux failed -> keep the still-playable fragmented copy
 
 
 def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
-    """WGC -> ffmpeg, chỉ ghi bản gốc. Bản AI nén sau, lúc bấm Phân tích
-    (pipeline.make_ai_copy) — lúc quay encode càng nhẹ càng ít lệch tiếng/hình."""
+    """WGC -> ffmpeg, writes only the original copy. The AI copy is compressed later,
+    when Analyze is clicked (pipeline.make_ai_copy) — the lighter the encode while
+    recording, the less audio/video drift."""
     from windows_capture import WindowsCapture
 
     full = outdir / "session.mp4"
     cap = WindowsCapture(cursor_capture=True, window_hwnd=hwnd,
                          monitor_index=None if hwnd else 1)
-    # queue nhỏ: frame nằm chờ lâu sẽ bị wallclock đóng dấu trễ -> hình trôi so với tiếng
+    # small queue: a frame stuck waiting gets a late wallclock stamp -> video drifts from audio
     q = queue.Queue(maxsize=20)
     dims, state = {}, {}
     frame_gap = 1.0 / float(REC_FPS)
 
     @cap.event
     def on_frame_arrived(frame, ctrl):
-        # WGC bắn theo refresh màn hình (60Hz+); chỉ giữ ~REC_FPS để encode nhẹ đi 3-8 lần
+        # WGC fires at the screen's refresh rate (60Hz+); throttle to ~REC_FPS, 3-8x lighter to encode
         now = time.monotonic()
         if now < state.get("next_t", 0.0):
             return
         state["next_t"] = now + frame_gap
         fb = frame.frame_buffer
-        if "crop" not in state:  # tính crop 1 lần khi biết kích thước frame
+        if "crop" not in state:  # compute the crop once, once the frame size is known
             if screen_rect and hwnd:
                 state["crop"] = screen_to_frame_crop(hwnd, screen_rect,
                                                      fb.shape[1], fb.shape[0])
-            elif screen_rect:    # quay màn hình: screen coords = frame coords
+            elif screen_rect:    # recording the screen: screen coords = frame coords
                 x, y, w, h = screen_rect
                 state["crop"] = (max(0, x), max(0, y),
                                  min(w, fb.shape[1] - x), min(h, fb.shape[0] - y))
@@ -277,7 +280,7 @@ def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
         try:
             q.put_nowait(fb.tobytes())
         except queue.Full:
-            pass  # encode không kịp -> bỏ frame
+            pass  # encode can't keep up -> drop the frame
 
     @cap.event
     def on_closed():
@@ -297,28 +300,28 @@ def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
            "-thread_queue_size", "32",
            "-use_wallclock_as_timestamps", "1", "-i", "pipe:0"]
     if audio:
-        # rtbufsize lớn + thread_queue lớn: encode nghẽn thì audio CHỜ thay vì bị vứt
-        # (buffer mặc định ~3MB = 17s; tràn là mất mẫu -> giọng đứt đoạn, trôi sớm dần).
-        # wallclock: audio cùng đồng hồ với video -> mux thẳng hàng.
+        # large rtbufsize + thread_queue: if encoding stalls, audio WAITS instead of being dropped
+        # (default buffer ~3MB = 17s; overflow loses samples -> choppy audio, drifting earlier over time).
+        # wallclock: audio shares video's clock -> mux stays aligned.
         cmd += ["-f", "dshow", "-rtbufsize", "512M", "-thread_queue_size", "4096",
                 "-use_wallclock_as_timestamps", "1", "-i", f"audio={audio}"]
-    # output 1: bản gốc để xem lại
-    # movflags frag: ghi file dạng fragmented -> app/ffmpeg chết giữa chừng vẫn xem được
+    # output 1: the original copy for review
+    # movflags frag: writes a fragmented file -> still playable if the app/ffmpeg dies mid-recording
     cmd += ["-map", "0:v"] + amap + [
         "-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-r", REC_FPS,
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", REC_CRF,
         "-pix_fmt", "yuv420p",
         "-movflags", "+frag_keyframe+empty_moov+default_base_moof"]
     if audio:
-        # aresample=async=1: nếu vẫn mất mẫu thì lấp im lặng ĐÚNG VỊ TRÍ theo timestamp,
-        # thay vì để timeline audio co ngắn lại (giọng nói trôi sớm so với hình)
-        # KHÔNG dùng -shortest: mic Bluetooth vào trễ (warmup) không cố định; nếu
-        # clip ngắn hơn warmup, -shortest cắt mất track audio -> "lúc có lúc không".
-        # aresample=async=1 đã lo sync; để ffmpeg xả nốt buffer audio khi đóng.
+        # aresample=async=1: if samples are still lost, fill silence at the RIGHT TIMESTAMP,
+        # instead of letting the audio timeline shrink (voice drifting earlier than video)
+        # NO -shortest: Bluetooth mic startup delay (warmup) isn't fixed; if the clip is
+        # shorter than the warmup, -shortest cuts the audio track -> "sometimes there, sometimes not".
+        # aresample=async=1 already handles sync; let ffmpeg flush the remaining audio buffer on close.
         cmd += ["-af", "aresample=async=1", "-c:a", "aac"]
     cmd += [str(full)]
 
-    # stderr ra file log: thấy được cảnh báo 'real-time buffer too full' nếu còn mất audio
+    # stderr goes to a log file: shows 'real-time buffer too full' warnings if audio is still being lost
     log = open(outdir / "ffmpeg.log", "wb")
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=log)
     try:
@@ -332,7 +335,7 @@ def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
                 break
             proc.stdin.write(buf)
     except OSError:
-        pass  # ffmpeg chết giữa chừng
+        pass  # ffmpeg died mid-recording
     finally:
         try:
             ctl.stop()
@@ -350,7 +353,7 @@ def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
 
 # -------------------------------------------------------------- mic meter ---
 class MicMeter:
-    """Đo mức mic để hiện thanh VU. Khớp tên dshow <-> sounddevice theo prefix."""
+    """Measures mic level to drive the VU bar. Matches dshow <-> sounddevice names by prefix."""
 
     def __init__(self):
         self.level = 0.0
@@ -412,7 +415,7 @@ class App:
         r.configure(bg="#16181d")
         try:
             import sv_ttk
-            sv_ttk.set_theme("dark")  # ponytail: theme Win11, không có thì dùng ttk mặc định
+            sv_ttk.set_theme("dark")  # ponytail: Win11 theme, falls back to default ttk if missing
         except ImportError:
             pass
 
@@ -421,7 +424,7 @@ class App:
              "danger": "#ff6b6b", "danger_hi": "#ff8a8a", "danger_ink": "#2a0d0d",
              "green": "#5fd39a", "muted": "#98a0ad", "dim": "#6c7482", "text": "#e9ebef"}
         self.C = C
-        # nút chính hổ phách / nút danger lúc đang quay (dựa trên Accent.TButton của sv-ttk)
+        # amber primary button / danger button while recording (built on sv-ttk's Accent.TButton)
         style.configure("Accent.TButton", background=C["accent"], foreground=C["accent_ink"])
         style.map("Accent.TButton",
                   background=[("pressed", C["accent_hi"]), ("active", C["accent_hi"])])
@@ -453,7 +456,7 @@ class App:
         body.pack(fill="both", expand=True, padx=8, pady=(0, 10))
         body.columnconfigure(0, weight=1)
 
-        # ---- 1 · vùng quay ----
+        # ---- 1 · record area ----
         self.lbl_region_title = ttk.Label(body, style="Section.TLabel")
         self.lbl_region_title.grid(row=0, column=0, sticky="w", **pad)
         self.region_lbl = tk.Label(body, font=("Consolas", 10), fg=C["muted"],
@@ -474,8 +477,8 @@ class App:
                           state="readonly")
         cb.pack(side="left", fill="x", expand=True)
         cb.bind("<<ComboboxSelected>>", lambda e: self.start_meter())
-        # VU bar vẽ bằng canvas — sv-ttk dựng Progressbar bằng ảnh sprite cố định,
-        # không đổi màu fill được nên tự vẽ, đổi màu theo mức trong tick()
+        # VU bar drawn on a canvas — sv-ttk builds Progressbar from a fixed sprite image,
+        # its fill color can't be changed, so it's hand-drawn here, recolored by level in tick()
         self.vu = tk.Canvas(microw, width=140, height=16, bg="#14161b",
                             highlightthickness=1, highlightbackground="#2a2f3a", bd=0)
         self.vu.pack(side="left", fill="x", expand=True, padx=(8, 0))
@@ -493,7 +496,7 @@ class App:
         ttk.Separator(body).grid(row=7, column=0, columnspan=2, sticky="ew",
                                  padx=10, pady=(6, 2))
 
-        # ---- status + thời gian quay ----
+        # ---- status + recording time ----
         statrow = ttk.Frame(body)
         statrow.grid(row=8, column=0, columnspan=2, sticky="ew", padx=14, pady=(2, 4))
         self.status_var = tk.StringVar(value="")
@@ -521,7 +524,7 @@ class App:
         self.root.after(0, lambda: self.status_lbl.configure(foreground=self.status_color))
 
     def render_lang(self):
-        """Cập nhật text của toàn bộ widget theo ngôn ngữ hiện tại."""
+        """Refresh every widget's text for the current language."""
         self.lang_btn.config(text=t("lang_btn"))
         self.lbl_tagline.config(text=t("tagline"))
         self.lbl_region_title.config(text=t("region_title"))
@@ -532,7 +535,7 @@ class App:
         self.sess_btn.config(text=t("sessions"))
         if not self.hwnd:
             self.region_lbl.config(text=t("region_none"))
-        if self.mic_var.get() == self.mic_none:  # đang hiện placeholder -> đổi theo ngôn ngữ
+        if self.mic_var.get() == self.mic_none:  # placeholder currently shown -> switch language
             self.mic_none = t("mic_none")
             self.mic_var.set(self.mic_none)
         self.status(t("ready"))
@@ -550,7 +553,7 @@ class App:
         self.vu.delete("all")
         self.vu.create_rectangle(1, 1, max(2, 1 + int((w - 2) * lvl / 100)), 15,
                                  fill=col, width=0)
-        if self.stop_evt:  # đang quay -> đếm giờ
+        if self.stop_evt:  # recording -> count elapsed time
             el = int(time.monotonic() - self.rec_start)
             self.elapsed_var.set(f"{el // 60:02d}:{el % 60:02d}")
         self.root.after(50, self.tick)
@@ -578,7 +581,7 @@ class App:
 
     # -- record --
     def toggle(self):
-        if self.stop_evt:  # đang quay -> dừng
+        if self.stop_evt:  # recording -> stop
             self.stop_evt.set()
             self.stop_evt = None
             self.rec_btn.config(text=t("rec_start"), style="Accent.TButton")
@@ -589,7 +592,7 @@ class App:
         self.outdir.mkdir(parents=True, exist_ok=True)
         mic = self.mic_var.get()
         audio = mic if mic and mic != self.mic_none else None
-        self.meter.stop()  # nhả mic cho ffmpeg
+        self.meter.stop()  # release the mic for ffmpeg
         self.stop_evt = threading.Event()
         self.rec_start = time.monotonic()
         threading.Thread(target=record_session,
@@ -599,7 +602,7 @@ class App:
         self.rec_btn.config(text=t("rec_stop"), style="Danger.TButton")
         self.an_btn.config(state="disabled")
 
-    # -- review server (server.py chạy nền trong app) --
+    # -- review server (server.py runs in the background inside the app) --
     def ensure_server(self):
         if getattr(self, "_server", None):
             return

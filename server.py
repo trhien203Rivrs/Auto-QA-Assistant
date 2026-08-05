@@ -1,7 +1,7 @@
-"""Server review: liệt kê sessions, phân tích Gemini, push từng bug lên Jira.
+"""Review server: lists sessions, runs Gemini analysis, pushes bugs to Jira.
 
-Chạy riêng:  python server.py   ->  http://127.0.0.1:8756
-(qa_app.py cũng tự chạy server này nền khi bấm "Xem sessions".)
+Run standalone:  python server.py   ->  http://127.0.0.1:8756
+(qa_app.py also runs this server in the background when you click "View sessions".)
 """
 import datetime
 import json
@@ -26,9 +26,9 @@ _analyzing: set[str] = set()
 
 
 def _sdir(sid: str) -> Path:
-    d = SESSIONS / Path(sid).name  # chặn path traversal
+    d = SESSIONS / Path(sid).name  # blocks path traversal
     if not d.is_dir():
-        raise HTTPException(404, f"Session {sid} không tồn tại")
+        raise HTTPException(404, f"Session {sid} does not exist")
     return d
 
 
@@ -44,7 +44,7 @@ def _bugs(d: Path):
 
 def _save_bugs(d: Path, bugs: list):
     data = _raw(d) or {}
-    data["bugs"] = bugs  # giữ nguyên timing và các key khác
+    data["bugs"] = bugs  # keep timing and other keys untouched
     (d / "bugs.json").write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -89,7 +89,7 @@ def get_session(sid: str):
 
 @app.post("/api/sessions/upload")
 async def upload_session(file: UploadFile):
-    """Tải 1 video có sẵn lên thành session mới (để test pipeline không cần quay)."""
+    """Upload an existing video as a new session (test the pipeline without recording)."""
     sid = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_upload"
     d = SESSIONS / sid
     d.mkdir(parents=True)
@@ -102,7 +102,7 @@ async def upload_session(file: UploadFile):
 def analyze(sid: str):
     d = _sdir(sid)
     if d.name in _analyzing:
-        raise HTTPException(400, "Đang phân tích rồi")
+        raise HTTPException(400, "Already analyzing")
     (d / "analyze_error.txt").unlink(missing_ok=True)
     _analyzing.add(d.name)
 
@@ -115,7 +115,7 @@ def analyze(sid: str):
             _analyzing.discard(d.name)
 
     threading.Thread(target=work, daemon=True).start()
-    return {"ok": True}  # UI poll GET /api/sessions/{sid} tới khi analyzing=False
+    return {"ok": True}  # UI polls GET /api/sessions/{sid} until analyzing=False
 
 
 # ----------------------------------------------------------------- jira ----
@@ -146,12 +146,12 @@ def push_bug(sid: str, i: int):
     d = _sdir(sid)
     bugs = _bugs(d)
     if bugs is None or not (0 <= i < len(bugs)):
-        raise HTTPException(404, "Bug không tồn tại")
+        raise HTTPException(404, "Bug does not exist")
     b = bugs[i]
     if b.get("jira_key"):
-        raise HTTPException(400, f"Đã push rồi: {b['jira_key']}")
+        raise HTTPException(400, f"Already pushed: {b['jira_key']}")
 
-    # cắt clip (start-3s .. end+2s) + screenshot tại start để đính kèm
+    # cut a clip (start-3s .. end+2s) + a screenshot at start, to attach
     ff = find_ffmpeg()
     video = d / "session.mp4"
     start = _secs(b["start_time"])

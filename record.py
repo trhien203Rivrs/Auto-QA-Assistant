@@ -1,13 +1,13 @@
-"""Quay cửa sổ (hoặc màn hình) + mic thành mp4 để phân tích bug.
+"""Record a window (or screen) + mic to mp4 for bug analysis.
 
-Dùng WGC (Windows Graphics Capture) qua windows-capture: quay được nội dung GPU
-(Roblox...), BÁM THEO cửa sổ khi di chuyển, chụp cả khi bị cửa sổ khác che.
-Frame WGC được pipe sang ffmpeg để encode H.264 + ghép tiếng mic (WGC không có audio).
+Uses WGC (Windows Graphics Capture) via windows-capture: captures GPU content
+(Roblox...), TRACKS the window as it moves, captures it even when covered.
+WGC frames are piped to ffmpeg to encode H.264 + mux in mic audio (WGC has no audio).
 
-Cần: pip install windows-capture ; và ffmpeg.
-Chạy:  python record.py [tên_file.mp4]      (mặc định session.mp4)
-Dừng:  Ctrl+C  (Python bắt tín hiệu, đóng ffmpeg sạch -> file mp4 hoàn chỉnh).
-Mic khác:  đặt AUDIO_DEVICE=<tên dshow> trong .env; không thì tự lấy mic đầu tiên.
+Needs: pip install windows-capture ; and ffmpeg.
+Run:   python record.py [file_name.mp4]      (default: session.mp4)
+Stop:  Ctrl+C  (Python catches the signal, closes ffmpeg cleanly -> a complete mp4).
+Other mic: set AUDIO_DEVICE=<dshow name> in .env; otherwise the first mic is used.
 """
 import os
 import re
@@ -21,7 +21,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
-sys.stdout.reconfigure(encoding="utf-8")  # console Windows in được tiếng Việt
+sys.stdout.reconfigure(encoding="utf-8")  # Windows console can print non-ASCII
 
 
 def find_ffmpeg():
@@ -34,7 +34,7 @@ def find_ffmpeg():
 
 
 def list_windows():
-    """[(hwnd, title)] các cửa sổ đang hiện (top-level, có title)."""
+    """[(hwnd, title)] of currently visible windows (top-level, with a title)."""
     import ctypes
     from ctypes import wintypes
     u = ctypes.windll.user32
@@ -57,7 +57,7 @@ def list_windows():
 
 
 def first_audio_device(ff):
-    """Tên thiết bị audio dshow đầu tiên từ '-list_devices'."""
+    """First dshow audio device name from '-list_devices'."""
     out = subprocess.run(
         [ff, "-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
         capture_output=True, text=True, errors="ignore",
@@ -70,14 +70,14 @@ def first_audio_device(ff):
 
 
 def record_wgc(ff, out, audio, hwnd=None, monitor=None, crop=None):
-    """Bắt frame WGC -> pipe sang ffmpeg (encode + ghép mic). Ctrl+C để dừng.
+    """Capture WGC frames -> pipe to ffmpeg (encode + mux mic). Ctrl+C to stop.
 
-    crop=(x, y, w, h) trong tọa độ frame: chỉ lấy vùng đó (vd viewport Studio).
+    crop=(x, y, w, h) in frame coordinates: only that region is kept (e.g. Studio viewport).
     """
     from windows_capture import WindowsCapture
 
     cap = WindowsCapture(cursor_capture=True, window_hwnd=hwnd, monitor_index=monitor)
-    # queue nhỏ: frame chờ lâu sẽ bị wallclock đóng dấu trễ -> hình trôi so với tiếng
+    # small queue: a frame stuck waiting gets a late wallclock stamp -> video drifts from audio
     q = queue.Queue(maxsize=20)
     dims = {}
     dropped = [0]
@@ -85,7 +85,7 @@ def record_wgc(ff, out, audio, hwnd=None, monitor=None, crop=None):
 
     @cap.event
     def on_frame_arrived(frame, ctrl):
-        # WGC bắn theo refresh màn hình; chỉ giữ ~30fps cho khớp -r 30 ở dưới
+        # WGC fires at the screen's refresh rate; throttle to ~30fps to match -r 30 below
         now = time.monotonic()
         if now < state["next_t"]:
             return
@@ -93,28 +93,28 @@ def record_wgc(ff, out, audio, hwnd=None, monitor=None, crop=None):
         fb = frame.frame_buffer
         if crop:
             x, y, w, h = crop
-            fb = fb[y:y + h, x:x + w]            # cắt vùng viewport (BGRA)
+            fb = fb[y:y + h, x:x + w]            # crop the viewport region (BGRA)
         if not dims:
             dims["w"], dims["h"] = fb.shape[1], fb.shape[0]
         try:
-            q.put_nowait(fb.tobytes())           # bgra, w*h*4 byte
+            q.put_nowait(fb.tobytes())           # bgra, w*h*4 bytes
         except queue.Full:
-            dropped[0] += 1                       # encode không kịp -> bỏ frame
+            dropped[0] += 1                       # encode can't keep up -> drop the frame
 
     @cap.event
     def on_closed():
         q.put(None)
 
     ctl = cap.start_free_threaded()
-    first = q.get()                  # chờ frame đầu để biết kích thước
+    first = q.get()                  # wait for the first frame to learn its size
     if first is None:
-        sys.exit("Không nhận được frame nào (cửa sổ minimize?).")
+        sys.exit("No frames received (window minimized?).")
     w, h = dims["w"], dims["h"]
-    print(f"Khung: {w}x{h}  |  Mic: {audio}  |  Ghi ra: {out}")
-    print("Đang quay... nhấn Ctrl+C để DỪNG.\n")
+    print(f"Frame: {w}x{h}  |  Mic: {audio}  |  Output: {out}")
+    print("Recording... press Ctrl+C to STOP.\n")
 
-    # rawvideo bgra vào từ pipe; wallclock timestamp giữ đồng bộ tiếng/hình khi quay lâu.
-    # crop về kích thước chẵn vì libx264 yuv420p cần chia hết cho 2.
+    # rawvideo bgra coming in via pipe; wallclock timestamps keep audio/video in sync for long recordings.
+    # crop to even dimensions since libx264 yuv420p needs sizes divisible by 2.
     cmd = [
         ff, "-y",
         "-f", "rawvideo", "-pix_fmt", "bgra", "-s", f"{w}x{h}",
@@ -122,8 +122,8 @@ def record_wgc(ff, out, audio, hwnd=None, monitor=None, crop=None):
         "-use_wallclock_as_timestamps", "1", "-i", "pipe:0",
     ]
     if audio:
-        # rtbufsize lớn: encode nghẽn thì audio CHỜ thay vì bị vứt (mặc định ~3MB=17s,
-        # tràn là mất mẫu -> giọng đứt đoạn, trôi sớm). wallclock: cùng đồng hồ với video.
+        # large rtbufsize: if encoding stalls, audio WAITS instead of being dropped (default
+        # ~3MB=17s; overflow loses samples -> choppy audio, drifts early). wallclock: same clock as video.
         cmd += ["-f", "dshow", "-rtbufsize", "512M", "-thread_queue_size", "4096",
                 "-use_wallclock_as_timestamps", "1", "-i", f"audio={audio}"]
     cmd += [
@@ -133,8 +133,8 @@ def record_wgc(ff, out, audio, hwnd=None, monitor=None, crop=None):
         "-movflags", "+faststart",
     ]
     if audio:
-        # aresample=async=1: nếu vẫn mất mẫu thì lấp im lặng đúng vị trí theo timestamp
-        # KHÔNG -shortest: mic Bluetooth warmup trễ; clip ngắn bị cắt mất tiếng.
+        # aresample=async=1: if samples are still lost, fill silence at the right timestamp
+        # NO -shortest: Bluetooth mic warmup is delayed; short clips would lose their audio.
         cmd += ["-af", "aresample=async=1", "-c:a", "aac"]
     cmd += [out]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
@@ -142,7 +142,7 @@ def record_wgc(ff, out, audio, hwnd=None, monitor=None, crop=None):
         proc.stdin.write(first)
         while True:
             try:
-                buf = q.get(timeout=0.5)   # timeout để Ctrl+C được xử lý kịp
+                buf = q.get(timeout=0.5)   # timeout so Ctrl+C is handled promptly
             except queue.Empty:
                 continue
             if buf is None:
@@ -161,11 +161,11 @@ def record_wgc(ff, out, audio, hwnd=None, monitor=None, crop=None):
             pass
         proc.wait()
     if dropped[0]:
-        print(f"(đã bỏ {dropped[0]} frame do encode không kịp — hạ độ phân giải nếu nhiều)")
-    print(f"\nXong: {out}")
+        print(f"(dropped {dropped[0]} frames because encoding couldn't keep up — lower resolution if this is high)")
+    print(f"\nDone: {out}")
 
 
-CROPS_FILE = Path(".crops.json")   # nhớ vùng crop theo tên cửa sổ
+CROPS_FILE = Path(".crops.json")   # remembers the crop region per window title
 
 
 def _load_crops():
@@ -184,7 +184,7 @@ def _save_crop(title, roi):
 
 
 def grab_one_frame(hwnd):
-    """Lấy 1 frame WGC (numpy BGRA) rồi dừng — để chọn vùng crop."""
+    """Grab a single WGC frame (numpy BGRA) then stop — used to pick the crop region."""
     from windows_capture import WindowsCapture
     q = queue.Queue()
     cap = WindowsCapture(cursor_capture=False, window_hwnd=hwnd)
@@ -208,30 +208,30 @@ def grab_one_frame(hwnd):
 
 
 def select_roi(hwnd):
-    """Kéo chuột chọn vùng ngay trên frame -> (x, y, w, h) hoặc None nếu hủy."""
+    """Drag-select a region right on the frame -> (x, y, w, h) or None if canceled."""
     import cv2
     frame = grab_one_frame(hwnd)
-    print("Kéo chuột chọn vùng viewport -> Enter/Space để OK, 'c' để hủy.")
-    x, y, w, h = cv2.selectROI("Chon vung (Enter=OK, C=huy)", frame[:, :, :3],
+    print("Drag to select the viewport region -> Enter/Space to confirm, 'c' to cancel.")
+    x, y, w, h = cv2.selectROI("Select region (Enter=OK, C=cancel)", frame[:, :, :3],
                                showCrosshair=False)
     cv2.destroyAllWindows()
     return (int(x), int(y), int(w), int(h)) if w and h else None
 
 
 def choose_crop(hwnd, title):
-    """Quyết định vùng crop: dùng vùng đã lưu / chọn mới / cả cửa sổ."""
+    """Decide the crop region: use a saved one / pick a new one / whole window."""
     saved = _load_crops().get(title)
     if saved:
-        a = input(f"Vùng đã lưu {saved}. Enter=dùng, 's'=chọn lại, 'f'=cả cửa sổ: ").strip()
+        a = input(f"Saved region {saved}. Enter=use it, 's'=pick again, 'f'=whole window: ").strip()
         if a == "f":
             return None
         if a != "s":
             return tuple(saved)
     elif "Roblox Studio" not in title:
-        # cửa sổ thường (Roblox Player...): mặc định cả cửa sổ
-        if input("Enter=cả cửa sổ, 'c'=chọn vùng crop: ").strip() != "c":
+        # a regular window (Roblox Player...): whole window by default
+        if input("Enter=whole window, 'c'=pick a crop region: ").strip() != "c":
             return None
-    # Studio chưa lưu, hoặc người dùng chọn 's'/'c' -> mở chọn vùng
+    # Studio with nothing saved yet, or the user chose 's'/'c' -> open the picker
     roi = select_roi(hwnd)
     if roi:
         _save_crop(title, roi)
@@ -241,28 +241,28 @@ def choose_crop(hwnd, title):
 def main():
     ff = find_ffmpeg()
     if not ff:
-        sys.exit("Không tìm thấy ffmpeg. Cài: winget install Gyan.FFmpeg")
+        sys.exit("ffmpeg not found. Install: winget install Gyan.FFmpeg")
 
     out = sys.argv[1] if len(sys.argv) > 1 else "session.mp4"
     audio = os.environ.get("AUDIO_DEVICE") or first_audio_device(ff)
     if not audio:
-        print("CẢNH BÁO: không thấy mic (BT chưa kết nối?). Quay VIDEO-ONLY, "
-              "không có tiếng -> AI sẽ thiếu ngữ cảnh voice. Kết nối mic rồi chạy lại.\n")
+        print("WARNING: no mic found (Bluetooth not connected?). Recording VIDEO-ONLY, "
+              "no audio -> the AI will lack voice context. Connect a mic and rerun.\n")
 
     wins = list_windows()
-    print("\n 0. [Toàn màn hình]")
+    print("\n 0. [Full screen]")
     for i, (_, t) in enumerate(wins, 1):
         print(f"{i:>2}. {t}")
-    c = input("\nChọn cửa sổ để quay (số, Enter = toàn màn hình): ").strip()
+    c = input("\nPick a window to record (number, Enter = full screen): ").strip()
     if c and c != "0":
         hwnd, title = wins[int(c) - 1]
-        print(f"Cửa sổ: {title}  (WGC — bám theo cửa sổ, chụp cả khi bị che)")
+        print(f"Window: {title}  (WGC — tracks the window, captures it even when covered)")
         crop = choose_crop(hwnd, title)
         if crop:
-            print(f"Chỉ quay vùng crop: {crop}")
+            print(f"Recording only the crop region: {crop}")
         record_wgc(ff, out, audio, hwnd=hwnd, crop=crop)
     else:
-        print("Toàn màn hình (màn chính)")
+        print("Full screen (primary monitor)")
         record_wgc(ff, out, audio, monitor=1)
 
 

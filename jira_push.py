@@ -1,8 +1,8 @@
-"""Đẩy bug lên Jira Cloud (REST API v3) — port từ repo QA-Assistant cũ.
+"""Push bugs to Jira Cloud (REST API v3) — ported from the old QA-Assistant repo.
 
-Chưa điền đủ JIRA_BASE_URL/JIRA_API_TOKEN/project trong .env -> MOCK MODE:
-issue được ghi vào sessions/<id>/pushed_issues.json thay vì gửi thật.
-Project key chỉnh được lúc chạy (lưu jira_settings.json); secrets luôn từ .env.
+JIRA_BASE_URL/JIRA_API_TOKEN/project not fully set in .env -> MOCK MODE:
+issues are written to sessions/<id>/pushed_issues.json instead of sent for real.
+Project key is adjustable at runtime (saved to jira_settings.json); secrets always come from .env.
 """
 import json
 import os
@@ -33,7 +33,7 @@ def get_project() -> str:
 def set_project(key: str):
     key = (key or "").strip()
     if not key:
-        raise ValueError("Cần project key")
+        raise ValueError("Project key required")
     _FILE.write_text(json.dumps({"project_key": key}, indent=2), encoding="utf-8")
 
 
@@ -42,25 +42,25 @@ def enabled() -> bool:
 
 
 def public() -> dict:
-    """Cho UI — không lộ token."""
+    """For the UI — never leaks the token."""
     return {"base_url": BASE_URL, "email": EMAIL, "project_key": get_project(),
             "has_token": bool(TOKEN), "mode": "real" if enabled() else "mock"}
 
 
 def list_projects() -> list[dict]:
-    """Các project nhận issue type Bug trên site đã cấu hình."""
+    """Projects that accept the Bug issue type on the configured site."""
     if not (BASE_URL and EMAIL and TOKEN):
-        raise ValueError("Điền JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN vào .env trước")
+        raise ValueError("Fill in JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN in .env first")
     try:
         r = requests.get(f"{BASE_URL}/rest/api/3/project/search",
                          params={"expand": "issueTypes", "maxResults": 100, "action": "create"},
                          auth=(EMAIL, TOKEN), timeout=15)
     except requests.RequestException as e:
-        raise ValueError(f"Không kết nối được Jira: {e}")
+        raise ValueError(f"Could not connect to Jira: {e}")
     if r.status_code in (401, 403):
-        raise ValueError("Sai email/API token trong .env")
+        raise ValueError("Wrong email/API token in .env")
     if not r.ok:
-        raise ValueError(f"Jira trả HTTP {r.status_code}")
+        raise ValueError(f"Jira returned HTTP {r.status_code}")
     return [{"key": p["key"], "name": p["name"]}
             for p in r.json().get("values", [])
             if any(t["name"] == "Bug" for t in p.get("issueTypes", []))]
@@ -76,9 +76,9 @@ def _block(label: str, text: str) -> dict:
 
 
 def _description_adf(bug: dict) -> dict:
-    """Mô tả theo template bug của studio: Time / Description / Actual / Expected."""
+    """Description in the studio's bug template: Time / Description / Actual / Expected."""
     t = bug.get("start_time", "") + (f" – {bug['end_time']}" if bug.get("end_time") else "")
-    content = [_block("Time (trong video đính kèm):", t)]
+    content = [_block("Time (in the attached video):", t)]
     for label, key in (("Description:", "description"),
                        ("Actual Result:", "actual_result"),
                        ("Expected Result:", "expected_result")):
@@ -99,7 +99,7 @@ def _fields(bug: dict, project_key: str) -> dict:
 
 # ------------------------------------------------------------------- push ---
 def push_bug(session_dir: Path, bug: dict, attachments: list[Path]) -> dict:
-    """Tạo issue + đính kèm clip/screenshot. Trả {key, url, mock}."""
+    """Create the issue + attach clip/screenshot. Returns {key, url, mock}."""
     project_key = get_project()
     if not enabled():
         return _push_mock(session_dir, bug, project_key or "MOCK")
@@ -113,9 +113,9 @@ def push_bug(session_dir: Path, bug: dict, attachments: list[Path]) -> dict:
             msg = "; ".join(err.get("errorMessages", []) + list(err.get("errors", {}).values()))
         except Exception:
             msg = resp.text[:200]
-        raise ValueError(f"Jira từ chối (HTTP {resp.status_code}, project {project_key}): {msg}")
+        raise ValueError(f"Jira rejected (HTTP {resp.status_code}, project {project_key}): {msg}")
     key = resp.json()["key"]
-    for path in attachments:  # best-effort: hụt attachment không làm hỏng push
+    for path in attachments:  # best-effort: a failed attachment doesn't fail the push
         try:
             with open(path, "rb") as f:
                 requests.post(f"{BASE_URL}/rest/api/3/issue/{key}/attachments",
@@ -124,7 +124,7 @@ def push_bug(session_dir: Path, bug: dict, attachments: list[Path]) -> dict:
                               files={"file": (path.name, f)}, timeout=120,
                               ).raise_for_status()
         except Exception as e:
-            print(f"[jira] attachment {path.name} lỗi: {e}")
+            print(f"[jira] attachment {path.name} failed: {e}")
     return {"key": key, "url": f"{BASE_URL}/browse/{key}", "mock": False}
 
 

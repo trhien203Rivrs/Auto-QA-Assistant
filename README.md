@@ -1,24 +1,24 @@
 # Auto-QA
 
-Quay màn hình game (Windows) → Gemini tìm bug → review trên web → đẩy lên Jira.
+Record gameplay (Windows) → Gemini finds bugs → review on the web → push to Jira.
 
-## Cài đặt
+## Install
 
 ```bash
 python -m venv venv && venv\Scripts\activate
 pip install -r requirements.txt
-winget install Gyan.FFmpeg          # cần ffmpeg trong PATH
+winget install Gyan.FFmpeg          # ffmpeg needs to be on PATH
 ```
 
-Tạo `.env`:
+Create `.env`:
 
 ```ini
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-2.5-flash
-AI_FPS=1                # fps bản nén gửi AI
+AI_FPS=1                # fps of the compressed copy sent to the AI
 AI_HEIGHT=480
 
-# Jira (tùy chọn — thiếu thì chạy MOCK, ghi ra pushed_issues.json)
+# Jira (optional — missing values fall back to MOCK mode, written to pushed_issues.json)
 JIRA_BASE_URL=https://xxx.atlassian.net
 JIRA_EMAIL=...
 JIRA_API_TOKEN=...
@@ -26,35 +26,35 @@ JIRA_PROJECT_KEY=QA
 JIRA_LABEL=auto-qa
 ```
 
-## Cách chạy
+## How to run
 
-| Việc | Lệnh |
+| Task | Command |
 |---|---|
-| App chính (quay → phân tích → review) | `python qa_app.py` |
-| Phân tích video có sẵn | `python analyze_file.py video.mp4` |
-| Chỉ mở web review sessions | `python server.py` → http://127.0.0.1:8756 |
-| Chỉ quay | `python record.py out.mp4` (Ctrl+C để dừng) |
+| Main app (record → analyze → review) | `python qa_app.py` |
+| Analyze an existing video | `python analyze_file.py video.mp4` |
+| Just open the web review of sessions | `python server.py` → http://127.0.0.1:8756 |
+| Just record | `python record.py out.mp4` (Ctrl+C to stop) |
 
-Luồng trong `qa_app.py`: **Chọn vùng quay** (rê chuột, `F8` chọn / `Esc` hủy) → chọn mic → **Bắt đầu** → chơi và nói bug ra miệng → **Dừng** → **Phân tích** → trang review tự mở.
+Flow in `qa_app.py`: **Pick area** (move the mouse, `F8` select / `Esc` cancel) → pick mic → **Start** → play and speak the bugs out loud → **Stop** → **Analyze** → the review page opens automatically.
 
-## Tính năng chính
+## Main features
 
-- **Quay bằng WGC** — bắt được nội dung GPU (Roblox), bám theo cửa sổ khi di chuyển, quay được cả khi bị che. Crop đúng vùng UI đã chọn.
-- **Ghi mic kèm VU meter** để biết audio có vào không; lời thoại mô tả bug được AI đọc cùng hình.
-- **Bản nén riêng cho AI** (`session.ai.mp4`, 1fps/480p/mono) — gửi Gemini nhanh và rẻ, review vẫn xem bản gốc.
-- **Trang review** có timeline, click bug là video nhảy tới đúng giây. Bản offline (`make_review.py`) dùng chung CSS với web nên trông giống hệt.
-- **Push Jira** từng bug một, chọn project ngay trong UI. Thiếu credential → MOCK mode, không gửi thật.
+- **WGC recording** — captures GPU content (Roblox), tracks the window as it moves, keeps recording even when covered. Crops to the exact UI area picked.
+- **Mic capture with a VU meter** to confirm audio is coming in; the spoken bug description is read by the AI alongside the video.
+- **A separate AI-only copy** (`session.ai.mp4`, 1fps/480p/mono) — sent to Gemini fast and cheap, while the review still shows the original.
+- **Review page** with a timeline; clicking a bug jumps the video to that moment. The offline version (`make_review.py`) shares the same CSS as the web page so it looks identical.
+- **Push to Jira** bug by bug, picking the project right in the UI. Missing credentials → MOCK mode, nothing is sent for real.
 
-## Cấu trúc
+## Structure
 
 ```
-qa_app.py       App tkinter, điều phối cả pipeline
-record.py       Quay WGC + mic → mp4
-pipeline.py     Nén bản AI + gọi Gemini → bugs.json
-bug_report.py   Gemini: video → danh sách bug (schema pydantic)
+qa_app.py       Tkinter app, orchestrates the whole pipeline
+record.py       WGC + mic recording → mp4
+pipeline.py     Compress the AI copy + call Gemini → bugs.json
+bug_report.py   Gemini: video → list of bugs (pydantic schema)
 server.py       FastAPI: list/analyze/push sessions
-ui.html         Web review
-make_review.py  Xuất trang review offline
+ui.html         Web review page
+make_review.py  Generates the offline review page
 jira_push.py    Jira Cloud REST v3
 sessions/<time>/session.mp4, session.ai.mp4, bugs.json
 ```

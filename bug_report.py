@@ -1,10 +1,10 @@
-"""Phân tích video gameplay bằng Gemini -> xuất bug report (JSON + Markdown).
+"""Analyze gameplay video with Gemini -> output bug report (JSON + Markdown).
 
-Cài đặt:  pip install google-genai pydantic
+Install:  pip install google-genai pydantic
 API key:  set GEMINI_API_KEY=...   (Windows)  /  export GEMINI_API_KEY=...
 
-Dùng:     python bug_report.py <video.mp4>
-Xuất ra:  <video>.bugs.json  và  <video>.bugs.md
+Usage:    python bug_report.py <video.mp4>
+Outputs:  <video>.bugs.json  and  <video>.bugs.md
 """
 import concurrent.futures
 import os
@@ -18,35 +18,36 @@ from pathlib import Path
 
 from record import find_ffmpeg
 
-sys.stdout.reconfigure(encoding="utf-8")  # console Windows in được tiếng Việt
+sys.stdout.reconfigure(encoding="utf-8")  # Windows console can print non-ASCII
 
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-load_dotenv()  # đọc .env: GEMINI_API_KEY, GEMINI_MODEL
+load_dotenv()  # reads .env: GEMINI_API_KEY, GEMINI_MODEL
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-pro-preview")
-FPS = float(os.environ.get("SAMPLE_FPS", "1"))  # số frame/giây gửi Gemini (voice là chính)
-CHUNK_SEC = int(os.environ.get("CHUNK_SEC", "1200"))     # video dài hơn -> chia khúc 20 phút
-ANALYZE_WORKERS = int(os.environ.get("ANALYZE_WORKERS", "3"))  # số khúc phân tích song song
+FPS = float(os.environ.get("SAMPLE_FPS", "1"))  # frames/sec sent to Gemini (voice is primary)
+CHUNK_SEC = int(os.environ.get("CHUNK_SEC", "1200"))     # longer videos -> split into 20-min chunks
+ANALYZE_WORKERS = int(os.environ.get("ANALYZE_WORKERS", "3"))  # chunks analyzed in parallel
 
 SYSTEM = (
-    "Bạn là 1 trợ lý AI của QA. Đây là video quay lại một người vừa chơi game "
-    "vừa nói (voice) về lỗi trong game. Nhiệm vụ: chỉ ra CHÍNH XÁC thời điểm xuất "
-    "hiện lỗi, viết bug report dựa trên CẢ hai nguồn: lời nói của người dùng và "
-    "hình ảnh trong video. Chỉ báo cáo lỗi thực sự (bỏ qua bình luận không liên quan). "
-    "Thời gian dạng MM:SS tính từ đầu video. start_time là BẮT BUỘC; end_time nếu có."
+    "You are a QA AI assistant. This is a video of someone playing a game "
+    "while narrating (voice) bugs they notice. Task: pinpoint the EXACT time "
+    "each bug occurs and write a bug report based on BOTH sources: the user's "
+    "narration and the video's visuals. Only report real bugs (ignore unrelated "
+    "commentary). Time format MM:SS from the start of the video. start_time is "
+    "REQUIRED; end_time if available."
 )
 
 
 class Bug(BaseModel):
-    name: str                      # Tên lỗi
-    start_time: str                # MM:SS - bắt buộc
-    end_time: str | None = None    # MM:SS - nếu có
-    description: str               # Mô tả lỗi
-    actual_result: str             # Kết quả thực tế
-    expected_result: str           # Kết quả mong muốn
+    name: str                      # Bug name
+    start_time: str                # MM:SS - required
+    end_time: str | None = None    # MM:SS - if available
+    description: str               # Bug description
+    actual_result: str             # Actual result
+    expected_result: str           # Expected result
 
 
 class Report(BaseModel):
@@ -56,18 +57,18 @@ class Report(BaseModel):
 def upload_video(client, video_path: str):
     print(f"Uploading {video_path} ...")
     f = client.files.upload(file=video_path)
-    # File cần ở trạng thái ACTIVE trước khi dùng
+    # File must reach ACTIVE state before use
     while f.state.name == "PROCESSING":
         time.sleep(2)
         f = client.files.get(name=f.name)
     if f.state.name != "ACTIVE":
-        raise RuntimeError(f"Upload thất bại: state={f.state.name}")
+        raise RuntimeError(f"Upload failed: state={f.state.name}")
     return f
 
 
 def run_model(client, video_file, model: str):
-    """Trả về (Report, response) - response chứa usage_metadata."""
-    # Lấy mẫu FPS frame/giây + hạ media_resolution -> giảm token mạnh cho video dài.
+    """Returns (Report, response) - response holds usage_metadata."""
+    # Sample at FPS frames/sec + lower media_resolution -> big token savings for long videos.
     part = types.Part(
         file_data=types.FileData(file_uri=video_file.uri,
                                  mime_type=video_file.mime_type),
@@ -75,7 +76,7 @@ def run_model(client, video_file, model: str):
     )
     resp = client.models.generate_content(
         model=model,
-        contents=[part, "Hãy tìm và báo cáo tất cả các lỗi trong video này."],
+        contents=[part, "Find and report all bugs in this video."],
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM,
             response_mime_type="application/json",
@@ -102,7 +103,7 @@ def _secs(t: str) -> int:
 
 
 def _shift(t: str | None, offset: int) -> str | None:
-    """Cộng offset (giây) vào thời gian MM:SS -> MM:SS (phút có thể >59)."""
+    """Add offset (seconds) to a MM:SS time -> MM:SS (minutes may exceed 59)."""
     if not t:
         return t
     s = _secs(t) + offset
@@ -112,7 +113,7 @@ def _shift(t: str | None, offset: int) -> str | None:
 def _analyze_chunk(client, path, offset: int, model: str) -> list[Bug]:
     f = upload_video(client, str(path))
     report, _ = run_model(client, f, model)
-    for b in report.bugs:  # dời thời gian cục bộ của khúc về mốc toàn video
+    for b in report.bugs:  # shift chunk-local times back to full-video timeline
         b.start_time = _shift(b.start_time, offset)
         b.end_time = _shift(b.end_time, offset)
     return report.bugs
@@ -120,13 +121,13 @@ def _analyze_chunk(client, path, offset: int, model: str) -> list[Bug]:
 
 def analyze(video_path: str, model: str = MODEL) -> Report:
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    if _ffprobe_dur(video_path) <= CHUNK_SEC:  # đủ ngắn -> 1 call như cũ
+    if _ffprobe_dur(video_path) <= CHUNK_SEC:  # short enough -> single call as before
         f = upload_video(client, video_path)
         print("Analyzing...")
         report, _ = run_model(client, f, model)
         return report
 
-    # dài -> cắt khúc (copy stream, nhanh) rồi phân tích song song
+    # long video -> split into chunks (stream copy, fast) then analyze in parallel
     tmp = Path(tempfile.mkdtemp(prefix="qa_chunks_"))
     try:
         subprocess.run(
@@ -136,17 +137,17 @@ def analyze(video_path: str, model: str = MODEL) -> Report:
             check=True, capture_output=True)
         chunks = sorted(tmp.glob("chunk_*.mp4"))
         offsets, acc = [], 0.0
-        for c in chunks:  # offset thật theo độ dài từng khúc (cắt theo keyframe nên không đều)
+        for c in chunks:  # real offset from each chunk's duration (keyframe cuts are uneven)
             offsets.append(int(acc))
             acc += _ffprobe_dur(c)
-        print(f"Chia {len(chunks)} khúc, phân tích {ANALYZE_WORKERS} luồng song song...")
+        print(f"Split into {len(chunks)} chunks, analyzing with {ANALYZE_WORKERS} parallel workers...")
 
         def work(arg):
             path, off = arg
             try:
                 return _analyze_chunk(client, path, off, model)
-            except Exception as e:  # ponytail: 1 khúc lỗi thì bỏ khúc đó, không fail cả session
-                print(f"  ! khúc {path.name} lỗi, bỏ qua: {str(e)[:200]}")
+            except Exception as e:  # ponytail: a failing chunk is skipped, not the whole session
+                print(f"  ! chunk {path.name} failed, skipping: {str(e)[:200]}")
                 return []
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=ANALYZE_WORKERS) as ex:
@@ -165,8 +166,8 @@ def to_markdown(report: Report) -> str:
         t = b.start_time + (f" – {b.end_time}" if b.end_time else "")
         out += [
             f"## {i}. {b.name}",
-            f"- **Thời điểm:** {t}",
-            f"- **Mô tả:** {b.description}",
+            f"- **Time:** {t}",
+            f"- **Description:** {b.description}",
             f"- **Actual Result:** {b.actual_result}",
             f"- **Expected Result:** {b.expected_result}\n",
         ]
@@ -175,7 +176,7 @@ def to_markdown(report: Report) -> str:
 
 def main():
     if len(sys.argv) != 2:
-        sys.exit("Dùng: python bug_report.py <video>")
+        sys.exit("Usage: python bug_report.py <video>")
     video = sys.argv[1]
     report = analyze(video)
 
@@ -185,7 +186,7 @@ def main():
     json_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
     md_path.write_text(to_markdown(report), encoding="utf-8")
 
-    print(f"\nTìm thấy {len(report.bugs)} lỗi.")
+    print(f"\nFound {len(report.bugs)} bugs.")
     print(f"  {json_path}\n  {md_path}")
 
 

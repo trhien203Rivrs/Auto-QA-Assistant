@@ -1,21 +1,22 @@
-"""Tạo trang review offline: video player + danh sách bug, click là video nhảy.
+"""Build an offline review page: video player + bug list, click jumps the video.
 
-Dùng:  python make_review.py <video>       (cần <video>.bugs.json cạnh nó)
-Ra:    <video>.review.html  -> double-click mở bằng trình duyệt.
+Usage:  python make_review.py <video>       (needs <video>.bugs.json next to it)
+Output: <video>.review.html  -> double-click to open in a browser.
 
-Style lấy thẳng từ ui.html (đoạn <style>) nên bản offline luôn khớp web —
-không duplicate CSS ở 2 nơi. Data bug nhúng thẳng vào HTML nên mở file:// được.
+Style is pulled straight from ui.html's <style> block so the offline page always
+matches the web one — no CSS duplicated in two places. Bug data is embedded
+directly in the HTML so it works via file://.
 """
 import re
 import sys
 import json
 from pathlib import Path
 
-sys.stdout.reconfigure(encoding="utf-8")  # console Windows in được tiếng Việt
+sys.stdout.reconfigure(encoding="utf-8")  # Windows console can print non-ASCII
 
 
 def extract_css() -> str:
-    """Lấy khối <style> của ui.html để dùng chung thiết kế."""
+    """Grab ui.html's <style> block to share the same design."""
     css = (Path(__file__).resolve().parent / "ui.html").read_text(encoding="utf-8")
     m = re.search(r"<style>(.*?)</style>", css, re.S)
     return m.group(1) if m else ""
@@ -179,7 +180,7 @@ $('#lang-btn').onclick = () => { setLang(lang === 'vi' ? 'en' : 'vi'); $('#lang-
 
 def main():
     if len(sys.argv) != 2:
-        sys.exit("Dùng: python make_review.py <video>")
+        sys.exit("Usage: python make_review.py <video>")
     p = Path(sys.argv[1])
     data = json.loads(
         p.with_suffix(p.suffix + ".bugs.json").read_text(encoding="utf-8"))
@@ -193,7 +194,7 @@ def main():
                 .replace("__TIMING__", json.dumps(timing) if timing else "null"))
     out = p.with_suffix(p.suffix + ".review.html")
     out.write_text(out_html, encoding="utf-8")
-    print("Mở trang này bằng trình duyệt:")
+    print("Open this page in a browser:")
     print(" ", out.resolve())
 
 
