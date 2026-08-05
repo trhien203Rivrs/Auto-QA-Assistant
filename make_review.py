@@ -31,9 +31,8 @@ __CSS__
 <div id="main">
   <div class="stage">
     <video id="v" controls preload="metadata" src="__VIDEO__"></video>
-    <div class="nowbar" id="nowbar"><span class="now-dot"></span><span id="now-txt">—:—</span></div>
+    <div class="nowbar" id="nowbar"><span class="now-dot"></span><span id="now-txt">—:—</span><button id="lang-btn" class="lang-btn"></button></div>
     <div class="tlwrap"><div id="bar"><div class="track"></div></div><div id="tip"></div></div>
-    <span class="kbd">Space phát/dừng · J/K chuyển bug</span>
   </div>
   <div class="rail">
     <div class="rail-head">
@@ -48,42 +47,61 @@ __CSS__
   </div>
 </div>
 <script>
+const L = {
+  vi: {
+    openChip: 'mở', pushedChip: 'đã push', openBadge: 'mở', pushBadge: 'push', langBtn: 'EN',
+  },
+  en: {
+    openChip: 'open', pushedChip: 'pushed', openBadge: 'open', pushBadge: 'pushed', langBtn: 'VI',
+  },
+};
+let lang = 'vi';
+try { lang = localStorage.getItem('aq.lang') || 'vi'; } catch (e) {}
+const t = k => (L[lang] && L[lang][k]) ?? L.vi[k] ?? k;
+const setLang = l => { lang = l; try { localStorage.setItem('aq.lang', l); } catch (e) {} };
+const timingTxt = d => lang === 'vi'
+  ? `nén ${d.compress_s}s · Gemini ${d.gemini_s}s · bản AI ${d.ai_size_mb} MB`
+  : `compress ${d.compress_s}s · Gemini ${d.gemini_s}s · AI cut ${d.ai_size_mb} MB`;
 const BUGS = __BUGS__;
 const timing = __TIMING__;
-if (timing) document.getElementById('timing').textContent =
-  `nén ${timing.compress_s}s · Gemini ${timing.gemini_s}s · bản AI ${timing.ai_size_mb} MB`;
 const $ = s => document.querySelector(s);
 const secs = t => { let s = 0; for (const p of t.split(':')) s = s * 60 + +p; return s; };
 const v = $('#v'), bar = $('#bar'), list = $('#list'), now = $('#nowbar'), tip = $('#tip');
-$('#bug-count').textContent = BUGS.length;
 const pushedN = BUGS.filter(b => b.jira_key).length;
-$('#chip-open').textContent = `${BUGS.length - pushedN} mở`;
-$('#chip-pushed').textContent = `${pushedN} đã push`;
 
 const bugs = BUGS.map((b, i) => ({ ...b, i,
   _start: secs(b.start_time), _end: b.end_time ? secs(b.end_time) : null }));
 let cards = [], markers = [], lastActive = -1;
 const rngOf = b => b.start_time + (b.end_time ? ' – ' + b.end_time : '');
 
-bugs.forEach((b, i) => {
-  const el = document.createElement('article');
-  el.className = 'bug';
-  const state = b.jira_key
-    ? `<span class="bug-state"><span class="badge b-pushed">✓ ${b.jira_key}</span></span>`
-    : '<span class="bug-state"><span class="badge b-open">mở</span></span>';
-  el.innerHTML = `<div class="bug-top">
-      <span class="bug-id">#${String(i + 1).padStart(2, '0')}</span>
-      <span class="bug-time">${rngOf(b)}</span>${state}</div>
-    <h3 class="n">${b.name}</h3>
-    <p class="desc">${b.description}</p>
-    <dl>
-      <div><dt>Actual</dt><dd>${b.actual_result}</dd></div>
-      <div><dt>Expected</dt><dd>${b.expected_result}</dd></div>
-    </dl>`;
-  el.onclick = () => { v.currentTime = b._start; v.play(); };
-  list.appendChild(el);
-  cards.push(el);
-});
+function buildList() {
+  list.innerHTML = '';
+  cards = [];
+  bugs.forEach((b, i) => {
+    const el = document.createElement('article');
+    el.className = 'bug';
+    const state = b.jira_key
+      ? `<span class="bug-state"><span class="badge b-pushed">✓ ${t('pushBadge')}</span></span>`
+      : `<span class="bug-state"><span class="badge b-open">${t('openBadge')}</span></span>`;
+    el.innerHTML = `<div class="bug-top">
+        <span class="bug-id">#${String(i + 1).padStart(2, '0')}</span>
+        <span class="bug-time">${rngOf(b)}</span>${state}</div>
+      <h3 class="n">${b.name}</h3>
+      <p class="desc">${b.description}</p>
+      <dl>
+        <div><dt>Actual</dt><dd>${b.actual_result}</dd></div>
+        <div><dt>Expected</dt><dd>${b.expected_result}</dd></div>
+      </dl>`;
+    el.onclick = () => { v.currentTime = b._start; v.play(); };
+    list.appendChild(el);
+    cards.push(el);
+  });
+  $('#bug-count').textContent = bugs.length;
+  $('#chip-open').textContent = `${bugs.length - pushedN} ${t('openChip')}`;
+  $('#chip-pushed').textContent = `${pushedN} ${t('pushedChip')}`;
+  $('#timing').textContent = timing ? timingTxt(timing) : '';
+}
+buildList();
 
 v.addEventListener('loadedmetadata', () => {
   const dur = v.duration || 1;
@@ -151,18 +169,10 @@ document.addEventListener('keydown', e => {
   const tag = (e.target.tagName || '').toLowerCase();
   if (['input','select','textarea','video'].includes(tag) || e.target.isContentEditable) return;
   if (e.code === 'Space') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
-  else if (e.key === 'j') jump(1);
-  else if (e.key === 'k') jump(-1);
 });
-function jump(dir) {
-  if (!v.duration) return;
-  const t = v.currentTime;
-  let cand = bugs[0]._start, candI = 0;
-  if (dir > 0) { for (const b of bugs) if (b._start > t + .3) { cand = b._start; candI = b.i; break; } }
-  else { for (let i = bugs.length - 1; i >= 0; i--) if (bugs[i]._start < t - .3) { cand = bugs[i]._start; candI = bugs[i].i; break; } }
-  v.currentTime = cand; v.play();
-  cards[candI].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-}
+
+$('#lang-btn').textContent = t('langBtn');
+$('#lang-btn').onclick = () => { setLang(lang === 'vi' ? 'en' : 'vi'); $('#lang-btn').textContent = t('langBtn'); buildList(); };
 </script></body></html>
 """
 

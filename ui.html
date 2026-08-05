@@ -40,13 +40,17 @@
   /* ------------------------------ sidebar ------------------------------ */
   #side { flex:0 0 286px; display:flex; flex-direction:column; gap:9px;
     border-right:1px solid var(--line); background:rgba(16,18,22,.72);
-    backdrop-filter:blur(8px); padding:14px; overflow-y:auto; }
+    backdrop-filter:blur(8px); padding:14px; }
   .brand { display:flex; align-items:center; gap:10px; margin:2px 2px 8px; }
   .brand-mark { width:9px; height:9px; border-radius:50%; background:var(--accent);
     box-shadow:0 0 10px var(--accent); flex:none; }
   .brand-name { font-size:15px; font-weight:750; letter-spacing:-.01em; }
   .brand-sub { font-size:10.5px; color:var(--dim); text-transform:uppercase;
     letter-spacing:.16em; margin-top:1px; }
+  .lang-btn { margin-left:auto; padding:3px 10px; font-size:11px; font-weight:700;
+    background:var(--panel2); color:var(--muted); border:1px solid var(--line2);
+    border-radius:7px; cursor:pointer; transition:.14s; }
+  .lang-btn:hover { color:var(--text); border-color:var(--accent); }
 
   .eyebrow { font-size:10.5px; color:var(--dim); text-transform:uppercase;
     letter-spacing:.13em; font-weight:600; margin:10px 2px 4px; }
@@ -55,7 +59,7 @@
   #search::placeholder { color:var(--dim); }
   #search:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
 
-  #slist { display:flex; flex-direction:column; gap:7px; min-height:40px; }
+  #slist { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:7px; min-height:40px; }
   .sess { padding:10px 12px; background:var(--panel); border:1px solid var(--line);
     border-radius:11px; cursor:pointer; transition:.13s; }
   .sess:hover { border-color:var(--line2); background:var(--panel2); transform:translateY(-1px); }
@@ -71,7 +75,7 @@
   .b-pending { background:rgba(152,160,173,.14); color:var(--muted); }
   .b-run { background:rgba(110,168,255,.15); color:var(--blue); }
 
-  #jira-box { margin-top:auto; border-top:1px solid var(--line); padding-top:10px; font-size:12px; }
+  #jira-box { flex:none; border-top:1px solid var(--line); padding-top:10px; font-size:12px; }
   #jira-box select { width:100%; margin-top:6px; background:var(--panel); color:var(--text);
     border:1px solid var(--line); border-radius:8px; padding:7px 8px; }
   .jira-mode { margin-top:4px; color:var(--dim); font-size:12px; }
@@ -89,25 +93,24 @@
   .nowbar.on .now-dot { background:var(--accent); box-shadow:0 0 8px var(--accent); }
   .nowbar.on { color:var(--text); }
   #now-name { color:var(--accent); font-weight:650; }
-  .kbd { margin-left:auto; align-self:flex-end; color:var(--dim); font:10.5px var(--mono); }
   .timing { font:11px var(--mono); color:var(--dim); margin-top:8px; }
 
-  .tlwrap { position:relative; margin:2px 4px 4px; padding-bottom:20px; }
-  #bar { position:relative; height:28px; cursor:pointer; }
-  #bar .track { position:absolute; left:0; right:0; top:12px; height:4px;
+  .tlwrap { position:relative; margin:2px 4px 4px; padding-bottom:22px; }
+  #bar { position:relative; height:34px; cursor:pointer; }
+  #bar .track { position:absolute; left:0; right:0; top:17px; height:4px;
     background:var(--line); border-radius:3px; }
-  .mk { position:absolute; top:8px; height:13px; min-width:5px; border-radius:3px;
+  .mk { position:absolute; top:6px; height:11px; min-width:5px; border-radius:3px;
     background:var(--accent); opacity:.85; cursor:pointer; z-index:2;
     transition:height .12s, top .12s, opacity .12s, box-shadow .12s, background .12s; }
   .mk.pushed { background:var(--green); }
-  .mk:hover, .mk.active { height:18px; top:5px; opacity:1;
+  .mk:hover, .mk.active { height:17px; top:3px; opacity:1;
     box-shadow:0 0 10px var(--accent); }
   .mk.pushed:hover, .mk.pushed.active { box-shadow:0 0 10px var(--green); }
-  .ph { position:absolute; top:2px; bottom:2px; width:2px; background:#fff;
+  .ph { position:absolute; top:2px; bottom:7px; width:2px; background:#fff;
     box-shadow:0 0 6px rgba(255,255,255,.65); pointer-events:none; z-index:3;
     transition:left .25s linear; }
-  .tick { position:absolute; bottom:2px; transform:translateX(-50%);
-    font:10px var(--mono); color:var(--dim); pointer-events:none; }
+  .tick { position:absolute; bottom:0; transform:translateX(-50%);
+    font:10px var(--mono); line-height:1.1; color:var(--dim); pointer-events:none; }
 
   #tip { position:absolute; z-index:20; pointer-events:none; opacity:0;
     transform:translateY(4px); transition:.12s; background:#0c0e12;
@@ -171,7 +174,6 @@
     .stage video { max-height:52vh; }
     .rail { flex:none; width:auto; max-width:none; border-left:none;
       border-top:1px solid var(--line); }
-    .kbd { display:none; }
   }
   @media (prefers-reduced-motion: reduce) {
     * { animation:none !important; transition:none !important; }
@@ -182,23 +184,24 @@
   <div class="brand">
     <span class="brand-mark"></span>
     <div><div class="brand-name">Auto-QA</div><div class="brand-sub">Review & triage</div></div>
+    <button id="lang-btn" class="lang-btn" title="Ngôn ngữ / Language"></button>
   </div>
 
-  <button id="up-btn" class="btn-primary">⬆ Tải video lên</button>
+  <button id="up-btn" class="btn-primary" data-i18n="upload">⬆ Tải video lên</button>
   <input id="up-file" type="file" accept="video/mp4,video/*" hidden>
-  <div class="eyebrow">Sessions</div>
-  <input id="search" type="search" placeholder="Tìm theo tên session…" autocomplete="off">
+  <div class="eyebrow" data-i18n="sessions">Sessions</div>
+  <input id="search" type="search" data-i18n-ph="searchPh" placeholder="Tìm theo tên session…" autocomplete="off">
   <div id="slist"></div>
 
   <div id="jira-box">
     <div class="eyebrow">Jira</div>
     <div class="jira-mode" id="jira-mode"></div>
-    <select id="jira-proj"><option value="">(chọn project…)</option></select>
+    <select id="jira-proj"><option value="" data-i18n="jiraPh">(chọn project…)</option></select>
   </div>
 </aside>
 <main id="main"><div class="statecard"><div class="ico">🎬</div>
-  <h3>Chọn 1 session ở bên trái</h3>
-  <p>Mở một bản quay để xem lại từng bug. Bấm vào bug để video nhảy đúng thời điểm lỗi.</p>
+  <h3 data-i18n="pickH">Chọn 1 session ở bên trái</h3>
+  <p data-i18n="pickP">Mở một bản quay để xem lại từng bug. Bấm vào bug để video nhảy đúng thời điểm lỗi.</p>
 </div></main>
 <script>
 const $ = s => document.querySelector(s);
@@ -207,15 +210,61 @@ const api = (p, opt) => fetch('/api' + p, opt).then(async r => {
   return r.json();
 });
 const secs = t => { let s = 0; for (const p of t.split(':')) s = s * 60 + +p; return s; };
+
+// -------------------------------- i18n ----------------------------------
+const L = {
+  vi: {
+    upload: '⬆ Tải video lên', uploading: 'đang tải', uploadErr: 'Upload lỗi: ',
+    searchPh: 'Tìm theo tên session…', sessions: 'Sessions',
+    noSessions: 'Không có session.', analyzingBadge: 'đang phân tích…',
+    notAnalyzed: 'chưa phân tích', bugs: 'bug', pushedMeta: 'đã push',
+    jiraPh: '(chọn project…)', real: 'thật', mockNote: 'chưa cấu hình .env',
+    pickH: 'Chọn 1 session ở bên trái',
+    pickP: 'Mở một bản quay để xem lại từng bug. Bấm vào bug để video nhảy đúng thời điểm lỗi.',
+    analyzingH: 'Đang phân tích bằng Gemini',
+    analyzingP: 'Chạy mô hình nhận diện lỗi từ video — thường vài phút. Trang sẽ tự cập nhật khi xong.',
+    notAnalyzedH: 'Session chưa được phân tích',
+    notAnalyzedP: 'Gửi video này cho Gemini để tách danh sách lỗi kèm thời điểm.',
+    analyzeBtn: 'Phân tích bằng Gemini', prevErr: 'Lỗi lần trước: ',
+    openChip: 'mở', pushedChip: 'đã push', openBadge: 'mở', pushBadge: 'push',
+    pushBtn: 'Push to Jira', pushing: 'Đang push…', pushErr: 'Push lỗi: ',
+    langBtn: 'EN',
+  },
+  en: {
+    upload: '⬆ Upload video', uploading: 'uploading', uploadErr: 'Upload failed: ',
+    searchPh: 'Search by session name…', sessions: 'Sessions',
+    noSessions: 'No sessions.', analyzingBadge: 'analyzing…',
+    notAnalyzed: 'not analyzed', bugs: 'bugs', pushedMeta: 'pushed',
+    jiraPh: '(select project…)', real: 'real', mockNote: 'env not configured',
+    pickH: 'Pick a session on the left',
+    pickP: 'Open a recording to review each bug. Click a bug to jump the video to the exact moment.',
+    analyzingH: 'Analyzing with Gemini',
+    analyzingP: 'Running the model to extract bugs from the video — usually a few minutes. The page refreshes when done.',
+    notAnalyzedH: 'Session not analyzed yet',
+    notAnalyzedP: 'Send this video to Gemini to extract the bug list with timestamps.',
+    analyzeBtn: 'Analyze with Gemini', prevErr: 'Previous error: ',
+    openChip: 'open', pushedChip: 'pushed', openBadge: 'open', pushBadge: 'pushed',
+    pushBtn: 'Push to Jira', pushing: 'Pushing…', pushErr: 'Push failed: ',
+    langBtn: 'VI',
+  },
+};
+let lang = 'vi';
+try { lang = localStorage.getItem('aq.lang') || 'vi'; } catch (e) {}
+const t = k => (L[lang] && L[lang][k]) ?? L.vi[k] ?? k;
+const setLang = l => { lang = l; try { localStorage.setItem('aq.lang', l); } catch (e) {} };
+const timingTxt = d => lang === 'vi'
+  ? `nén ${d.compress_s}s · Gemini ${d.gemini_s}s · bản AI ${d.ai_size_mb} MB`
+  : `compress ${d.compress_s}s · Gemini ${d.gemini_s}s · AI cut ${d.ai_size_mb} MB`;
+
 let current = null, pollTimer = null, shown = null; // shown = {id, kind}
 let viewState = null; // {v, bugs, cards} của session đang mở
 let sessionsCache = [], searchQ = '';
 
 // ------------------------------- sessions -------------------------------
 function badgeHtml(s) {
-  if (s.analyzing) return '<span class="badge b-run">đang phân tích…</span>';
-  if (s.analyzed) return `<span class="badge b-open">${s.bug_count} bug</span>`;
-  return '<span class="badge b-pending">chưa phân tích</span>';
+  if (s.analyzing) return `<span class="badge b-run">${t('analyzingBadge')}</span>`;
+  if (s.analyzed) return `<span class="badge b-open">${s.bug_count} ${t('bugs')}</span>`;
+  return `<span class="badge b-pending">${t('notAnalyzed')}</span>`;
 }
 async function loadSessions() {
   sessionsCache = await api('/sessions');
@@ -226,7 +275,7 @@ function renderSessions() {
   const list = sessionsCache.filter(s => s.id.toLowerCase().includes(q));
   const el = $('#slist');
   if (!list.length) {
-    el.innerHTML = `<div style="color:var(--dim);font-size:12px;padding:6px 2px">Không có session.</div>`;
+    el.innerHTML = `<div style="color:var(--dim);font-size:12px;padding:6px 2px">${t('noSessions')}</div>`;
     return;
   }
   el.innerHTML = '';
@@ -235,7 +284,7 @@ function renderSessions() {
     d.className = 'sess' + (s.id === current ? ' active' : '');
     d.tabIndex = 0;
     const pushed = s.pushed_count
-      ? ` · <span style="color:var(--green)">${s.pushed_count} đã push</span>` : '';
+      ? ` · <span style="color:var(--green)">${s.pushed_count} ${t('pushedMeta')}</span>` : '';
     d.innerHTML = `<div class="row"><span class="id">${s.id}</span>${badgeHtml(s)}</div>
       <div class="meta">${s.size_mb} MB${pushed}</div>`;
     d.onclick = () => location.hash = s.id;
@@ -251,7 +300,7 @@ $('#up-file').onchange = async e => {
   const f = e.target.files[0];
   if (!f) return;
   const btn = $('#up-btn');
-  btn.disabled = true; btn.textContent = `⬆ ${f.name}… đang tải`;
+  btn.disabled = true; btn.textContent = `⬆ ${f.name}… ${t('uploading')}`;
   try {
     const fd = new FormData();
     fd.append('file', f);
@@ -259,8 +308,8 @@ $('#up-file').onchange = async e => {
     await api(`/sessions/${r.id}/analyze`, { method:'POST' });
     location.hash = r.id;
     loadSessions();
-  } catch (err) { alert('Upload lỗi: ' + err.message); }
-  btn.disabled = false; btn.textContent = '⬆ Tải video lên';
+  } catch (err) { alert(t('uploadErr') + err.message); }
+  btn.disabled = false; btn.textContent = t('upload');
   e.target.value = '';
 };
 
@@ -268,12 +317,12 @@ $('#up-file').onchange = async e => {
 async function loadJira() {
   const s = await api('/jira/settings');
   $('#jira-mode').innerHTML = s.mode === 'real'
-    ? `Jira: <span class="badge b-pushed">${s.project_key} · thật</span>`
-    : 'Jira: <span class="badge b-open">MOCK</span> — chưa cấu hình .env';
+    ? `Jira: <span class="badge b-pushed">${s.project_key} · ${t('real')}</span>`
+    : `Jira: <span class="badge b-open">MOCK</span> — ${t('mockNote')}`;
   try {
     const projects = await api('/jira/projects');
     const sel = $('#jira-proj');
-    sel.innerHTML = '<option value="">(chọn project…)</option>';
+    sel.innerHTML = `<option value="">${t('jiraPh')}</option>`;
     for (const p of projects) {
       const o = document.createElement('option');
       o.value = p.key; o.textContent = `${p.key} — ${p.name}`;
@@ -305,18 +354,18 @@ async function openSession(id) {
     }
     shown = { id, kind: 'analyzing' };
     $('#main').innerHTML = `<div class="statecard"><div class="spinner"></div>
-      <h3>Đang phân tích bằng Gemini</h3>
-      <p>Chạy mô hình nhận diện lỗi từ video — thường vài phút. Trang sẽ tự cập nhật khi xong.</p></div>`;
+      <h3>${t('analyzingH')}</h3>
+      <p>${t('analyzingP')}</p></div>`;
     pollTimer = setInterval(() => openSession(id), 4000);
     return;
   }
   if (!data.bugs) {
     shown = { id, kind: 'empty' };
     $('#main').innerHTML = `<div class="statecard"><div class="ico">🔍</div>
-      <h3>Session chưa được phân tích</h3>
-      ${data.error ? `<div class="err">Lỗi lần trước: ${data.error}</div>` : ''}
-      <p>Gửi video này cho Gemini để tách danh sách lỗi kèm thời điểm.</p>
-      <button id="an" class="btn-primary">Phân tích bằng Gemini</button></div>`;
+      <h3>${t('notAnalyzedH')}</h3>
+      ${data.error ? `<div class="err">${t('prevErr')}${data.error}</div>` : ''}
+      <p>${t('notAnalyzedP')}</p>
+      <button id="an" class="btn-primary">${t('analyzeBtn')}</button></div>`;
     $('#an').onclick = async () => {
       await api(`/sessions/${id}/analyze`, { method:'POST' });
       openSession(id);
@@ -332,7 +381,6 @@ async function openSession(id) {
       <video id="v" controls preload="metadata" src="${vsrc}"></video>
       <div class="nowbar" id="nowbar"><span class="now-dot"></span><span id="now-txt">—:—</span></div>
       <div class="tlwrap"><div id="bar"><div class="track"></div></div><div id="tip"></div></div>
-      <span class="kbd">Space phát/dừng · J/K chuyển bug</span>
     </div>
     <div class="rail">
       <div class="rail-head">
@@ -341,7 +389,7 @@ async function openSession(id) {
           <span class="chip open" id="chip-open"></span>
           <span class="chip pushed" id="chip-pushed"></span>
         </div>
-        ${timing ? `<div class="timing">nén ${timing.compress_s}s · Gemini ${timing.gemini_s}s · bản AI ${timing.ai_size_mb} MB</div>` : ''}
+        ${timing ? `<div class="timing">${timingTxt(timing)}</div>` : ''}
       </div>
       <div id="list"></div>
     </div>`;
@@ -349,8 +397,8 @@ async function openSession(id) {
   const v = $('#v'), bar = $('#bar'), list = $('#list'), now = $('#nowbar'), tip = $('#tip');
   $('#bug-count').textContent = data.bugs.length;
   const pushedN = data.bugs.filter(b => b.jira_key).length;
-  $('#chip-open').textContent = `${data.bugs.length - pushedN} mở`;
-  $('#chip-pushed').textContent = `${pushedN} đã push`;
+  $('#chip-open').textContent = `${data.bugs.length - pushedN} ${t('openChip')}`;
+  $('#chip-pushed').textContent = `${pushedN} ${t('pushedChip')}`;
 
   const bugs = data.bugs.map((b, i) => ({ ...b, i,
     _start: secs(b.start_time), _end: b.end_time ? secs(b.end_time) : null }));
@@ -362,8 +410,8 @@ async function openSession(id) {
     el.className = 'bug'; el.tabIndex = 0;
     const rng = b.start_time + (b.end_time ? ' – ' + b.end_time : '');
     const state = b.jira_key
-      ? `<span class="bug-state"><span class="badge b-pushed">✓ push</span></span>`
-      : '<span class="bug-state"><span class="badge b-open">mở</span></span>';
+      ? `<span class="bug-state"><span class="badge b-pushed">✓ ${t('pushBadge')}</span></span>`
+      : `<span class="bug-state"><span class="badge b-open">${t('openBadge')}</span></span>`;
     el.innerHTML = `<div class="bug-top">
         <span class="bug-id">#${String(i+1).padStart(2,'0')}</span>
         <span class="bug-time">${rng}</span>${state}</div>
@@ -466,22 +514,7 @@ document.addEventListener('keydown', e => {
   if (['input','select','textarea','video'].includes(tag) || e.target.isContentEditable) return;
   const { v } = viewState;
   if (e.code === 'Space') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
-  else if (e.key === 'j') jumpBug(viewState, 1);
-  else if (e.key === 'k') jumpBug(viewState, -1);
 });
-function jumpBug(vs, dir) {
-  const { v, bugs, cards } = vs;
-  if (!v.duration) return;
-  const t = v.currentTime;
-  let cand = bugs[0]._start, candI = 0;
-  if (dir > 0) {
-    for (const b of bugs) if (b._start > t + .3) { cand = b._start; candI = b.i; break; }
-  } else {
-    for (let i = bugs.length - 1; i >= 0; i--) if (bugs[i]._start < t - .3) { cand = bugs[i]._start; candI = bugs[i].i; break; }
-  }
-  v.currentTime = cand; v.play();
-  cards[candI].scrollIntoView({ block:'nearest', behavior:'smooth' });
-}
 
 function renderPush(row, sid, i, b) {
   if (b.jira_key) {
@@ -491,28 +524,49 @@ function renderPush(row, sid, i, b) {
   }
   const btn = document.createElement('button');
   btn.className = 'btn-ghost';
-  btn.textContent = 'Push to Jira';
+  btn.textContent = t('pushBtn');
   btn.onclick = async e => {
     e.stopPropagation();
-    btn.disabled = true; btn.textContent = 'Đang push…';
+    btn.disabled = true; btn.textContent = t('pushing');
     try {
       const res = await api(`/sessions/${sid}/bugs/${i}/push`, { method:'POST' });
       b.jira_key = res.key; b.jira_url = res.url;
       renderPush(row, sid, i, b);
       loadSessions();
     } catch (err) {
-      btn.disabled = false; btn.textContent = 'Push to Jira';
-      alert('Push lỗi: ' + err.message);
+      btn.disabled = false; btn.textContent = t('pushBtn');
+      alert(t('pushErr') + err.message);
     }
   };
   row.appendChild(btn);
 }
+
+// ------------------------------- language --------------------------------
+function applyLang() {
+  $('#lang-btn').textContent = t('langBtn');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+}
+function refreshLang() {
+  loadJira();
+  if (shown && viewState) {  // đang mở session -> giữ vị trí video
+    const pos = { t: viewState.v.currentTime, p: viewState.v.paused };
+    openSession(shown.id);
+    const v = $('#v');
+    const restore = () => { try { v.currentTime = Math.min(pos.t, v.duration || 0); } catch (e) {}; if (pos.p) v.pause(); else v.play().catch(() => {}); };
+    if (v.readyState >= 1) restore(); else v.addEventListener('loadedmetadata', restore, { once:true });
+  } else if (shown) {
+    openSession(shown.id);
+  }
+}
+$('#lang-btn').onclick = () => { setLang(lang === 'vi' ? 'en' : 'vi'); applyLang(); refreshLang(); };
 
 // --------------------------------- boot ---------------------------------
 window.addEventListener('hashchange', () => {
   const id = location.hash.slice(1);
   if (id) openSession(id);
 });
+applyLang();
 loadSessions(); loadJira();
 if (location.hash.length > 1) openSession(location.hash.slice(1));
 </script></body></html>

@@ -44,6 +44,73 @@ REC_FPS = os.environ.get("REC_FPS", "20")  # fps bản gốc (bản AI: AI_FPS t
 SESSIONS = Path("sessions")
 VK = {"F8": 0x77, "ESC": 0x1B}
 
+# ---------------------------------------------------------------- i18n -----
+# Mặc định tiếng Anh (AQA_LANG=vi để mặc định tiếng Việt); nút EN/VI ở header đổi nhanh.
+L = {
+    "en": {
+        "tagline": "record · analyze · push Jira",
+        "region_title": "1 · RECORD AREA",
+        "region_none": "Full screen (not selected)",
+        "pick_btn": "Pick area  (F8 select · Esc cancel)",
+        "mic_title": "2 · MIC",
+        "mic_none": "(no mic)",
+        "rec_start": "●  Start recording",
+        "rec_stop": "■  Stop recording",
+        "analyze": "Analyze (Gemini) + open review",
+        "sessions": "View sessions (review + push Jira)",
+        "ready": "Ready.",
+        "no_mic_warn": "WARNING: no mic found — will record video only.",
+        "mic_ok": "Mic OK — speak now, the VU bar should move.",
+        "mic_fail": "Cannot open this mic for level (recording still works).",
+        "full_screen": "Full screen",
+        "no_frame": "No frames received (window minimized?)",
+        "recording": "Recording {w}x{h} -> {name}/ ...",
+        "saved": "Saved {name} — click Analyze when ready (AI copy is compressed then).",
+        "analyzing": "Uploading + analyzing with Gemini (a few minutes)...",
+        "analyze_err": "Analyze failed: {err}",
+        "done": "Done — {n} bugs. Review + push Jira in the browser.",
+        "ffmpeg_missing": "ffmpeg not found. Install: winget install Gyan.FFmpeg",
+        "win": "window",
+        "sub": "  [sub-area]",
+        "lang_btn": "VI",
+    },
+    "vi": {
+        "tagline": "quay · phân tích · push Jira",
+        "region_title": "1 · VÙNG QUAY",
+        "region_none": "Toàn màn hình (chưa chọn)",
+        "pick_btn": "Chọn vùng  (F8 chọn · Esc hủy)",
+        "mic_title": "2 · MIC",
+        "mic_none": "(không có mic)",
+        "rec_start": "●  Bắt đầu quay",
+        "rec_stop": "■  Dừng quay",
+        "analyze": "Phân tích (Gemini) + mở review",
+        "sessions": "Xem sessions (review + push Jira)",
+        "ready": "Sẵn sàng.",
+        "no_mic_warn": "CẢNH BÁO: không thấy mic — sẽ quay video-only.",
+        "mic_ok": "Mic OK — nói thử, thanh VU phải rung.",
+        "mic_fail": "Không mở được mic này để đo mức (vẫn quay được).",
+        "full_screen": "Toàn màn hình",
+        "no_frame": "Không nhận được frame (cửa sổ minimize?)",
+        "recording": "Đang quay {w}x{h} -> {name}/ ...",
+        "saved": "Đã lưu {name} — bấm Phân tích khi sẵn sàng (bản AI nén lúc đó).",
+        "analyzing": "Đang upload + phân tích bằng Gemini (vài phút)...",
+        "analyze_err": "Phân tích lỗi: {err}",
+        "done": "Xong — {n} bug. Review + push Jira trong trình duyệt.",
+        "ffmpeg_missing": "Không tìm thấy ffmpeg. Cài: winget install Gyan.FFmpeg",
+        "win": "cửa sổ",
+        "sub": "  [vùng con]",
+        "lang_btn": "EN",
+    },
+}
+lang = os.environ.get("AQA_LANG", "en").lower()
+
+
+def t(k, **kw):
+    """Tra từ khoá k trong ngôn ngữ hiện tại; có **kw thì format {phần}."""
+    d = L.get(lang, L["en"])
+    s = d.get(k) or L["en"].get(k) or k
+    return s.format(**kw) if kw else s
+
 
 def list_audio_devices(ff):
     out = subprocess.run(
@@ -110,7 +177,7 @@ class RegionPicker:
             return
         self.top.geometry(f"{w}x{h}+{r.left}+{r.top}")
         self.canvas.delete("all")
-        self.canvas.create_rectangle(1, 1, w - 2, h - 2, outline="#f2a33c", width=2)
+        self.canvas.create_rectangle(1, 1, w - 2, h - 2, outline="#ff0000", width=3)
 
     def select(self):
         if not self.ctrl:
@@ -126,7 +193,7 @@ class RegionPicker:
                    [(er.left, tr.left), (er.top, tr.top),
                     (er.right, tr.right), (er.bottom, tr.bottom)])
         rect = None if same else (er.left, er.top, er.width(), er.height())
-        label = (top.Name or "cửa sổ")[:60] + ("" if same else "  [vùng con]")
+        label = (top.Name or t("win"))[:60] + ("" if same else t("sub"))
         self.finish(hwnd, rect, label)
 
     def finish(self, hwnd, rect, label):
@@ -219,10 +286,10 @@ def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
     ctl = cap.start_free_threaded()
     first = q.get()
     if first is None:
-        status("Không nhận được frame (cửa sổ minimize?)")
+        status(t("no_frame"))
         return
     w, h = dims["w"], dims["h"]
-    status(f"Đang quay {w}x{h} -> {outdir.name}/ ...")
+    status(t("recording", w=w, h=h, name=outdir.name))
 
     amap = ["-map", "1:a"] if audio else []
     cmd = [ff, "-y",
@@ -278,7 +345,7 @@ def record_session(ff, hwnd, screen_rect, audio, outdir, stop_evt, status):
         proc.wait()
         log.close()
     _finalize_mp4(ff, full)
-    status(f"Đã lưu {full.name} — bấm Phân tích khi sẵn sàng (bản AI nén lúc đó).")
+    status(t("saved", name=full.name))
 
 
 # -------------------------------------------------------------- mic meter ---
@@ -330,7 +397,7 @@ class App:
     def __init__(self):
         self.ff = find_ffmpeg()
         if not self.ff:
-            sys.exit("Không tìm thấy ffmpeg. Cài: winget install Gyan.FFmpeg")
+            sys.exit(t("ffmpeg_missing"))
         self.hwnd = None
         self.screen_rect = None
         self.stop_evt = None
@@ -377,29 +444,30 @@ class App:
                   font=("Segoe UI", 11)).pack(side="left")
         ttk.Label(top, text="Auto-QA Recorder",
                   font=("Segoe UI", 13, "bold")).pack(side="left", padx=(6, 0))
-        ttk.Label(top, text="quay · phân tích · push Jira",
-                  font=("Segoe UI", 9), foreground=C["dim"]).pack(
-            side="left", padx=(12, 0), pady=(3, 0))
+        self.lbl_tagline = ttk.Label(top, font=("Segoe UI", 9), foreground=C["dim"])
+        self.lbl_tagline.pack(side="left", padx=(12, 0), pady=(3, 0))
+        self.lang_btn = ttk.Button(top, width=4, command=self.toggle_lang)
+        self.lang_btn.pack(side="right")
 
         body = ttk.Frame(r)
         body.pack(fill="both", expand=True, padx=8, pady=(0, 10))
         body.columnconfigure(0, weight=1)
 
         # ---- 1 · vùng quay ----
-        ttk.Label(body, text="1 · VÙNG QUAY",
-                  style="Section.TLabel").grid(row=0, column=0, sticky="w", **pad)
-        self.region_lbl = tk.Label(body, text="Toàn màn hình (chưa chọn)",
-                                   font=("Consolas", 10), fg=C["muted"], bg="#20242c",
-                                   anchor="w", padx=10, pady=6, relief="flat")
+        self.lbl_region_title = ttk.Label(body, style="Section.TLabel")
+        self.lbl_region_title.grid(row=0, column=0, sticky="w", **pad)
+        self.region_lbl = tk.Label(body, font=("Consolas", 10), fg=C["muted"],
+                                   bg="#20242c", anchor="w", padx=10, pady=6, relief="flat")
         self.region_lbl.grid(row=1, column=0, sticky="ew", **box)
-        ttk.Button(body, text="Chọn vùng  (F8 chọn · Esc hủy)",
-                   command=self.pick).grid(row=1, column=1, sticky="e", **box)
+        self.pick_btn = ttk.Button(body, command=self.pick)
+        self.pick_btn.grid(row=1, column=1, sticky="e", **box)
 
         # ---- 2 · mic ----
-        ttk.Label(body, text="2 · MIC",
-                  style="Section.TLabel").grid(row=2, column=0, sticky="w", **pad)
+        self.lbl_mic_title = ttk.Label(body, style="Section.TLabel")
+        self.lbl_mic_title.grid(row=2, column=0, sticky="w", **pad)
         self.mics = list_audio_devices(self.ff)
-        self.mic_var = tk.StringVar(value=self.mics[0] if self.mics else "(không có mic)")
+        self.mic_none = t("mic_none")
+        self.mic_var = tk.StringVar(value=self.mics[0] if self.mics else self.mic_none)
         microw = ttk.Frame(body)
         microw.grid(row=3, column=0, columnspan=2, sticky="ew", **box)
         cb = ttk.Combobox(microw, textvariable=self.mic_var, values=self.mics,
@@ -413,16 +481,14 @@ class App:
         self.vu.pack(side="left", fill="x", expand=True, padx=(8, 0))
 
         # ---- actions ----
-        self.rec_btn = ttk.Button(body, text="●  Bắt đầu quay", style="Accent.TButton",
-                                  command=self.toggle)
+        self.rec_btn = ttk.Button(body, style="Accent.TButton", command=self.toggle)
         self.rec_btn.grid(row=4, column=0, columnspan=2, sticky="ew",
                           padx=14, pady=(12, 2))
-        self.an_btn = ttk.Button(body, text="Phân tích (Gemini) + mở review",
-                                 command=self.analyze, state="disabled")
+        self.an_btn = ttk.Button(body, command=self.analyze, state="disabled")
         self.an_btn.grid(row=5, column=0, columnspan=2, sticky="ew", padx=14, pady=2)
-        ttk.Button(body, text="Xem sessions (review + push Jira)",
-                   command=self.open_review).grid(
-            row=6, column=0, columnspan=2, sticky="ew", padx=14, pady=(2, 4))
+        self.sess_btn = ttk.Button(body, command=self.open_review)
+        self.sess_btn.grid(row=6, column=0, columnspan=2, sticky="ew",
+                           padx=14, pady=(2, 4))
 
         ttk.Separator(body).grid(row=7, column=0, columnspan=2, sticky="ew",
                                  padx=10, pady=(6, 2))
@@ -430,7 +496,7 @@ class App:
         # ---- status + thời gian quay ----
         statrow = ttk.Frame(body)
         statrow.grid(row=8, column=0, columnspan=2, sticky="ew", padx=14, pady=(2, 4))
-        self.status_var = tk.StringVar(value="Sẵn sàng.")
+        self.status_var = tk.StringVar(value="")
         self.status_color = C["muted"]
         self.status_lbl = ttk.Label(statrow, textvariable=self.status_var,
                                     style="Muted.TLabel", wraplength=520)
@@ -439,10 +505,12 @@ class App:
         ttk.Label(statrow, textvariable=self.elapsed_var,
                   style="Mono.TLabel").pack(side="right")
 
+        self.render_lang()
+
         if self.mics:
             self.start_meter()
         else:
-            self.status("CẢNH BÁO: không thấy mic — sẽ quay video-only.", color=C["accent"])
+            self.status(t("no_mic_warn"), color=C["accent"])
         self.tick()
         r.protocol("WM_DELETE_WINDOW", self.quit)
 
@@ -451,6 +519,28 @@ class App:
         self.status_color = color or "#98a0ad"
         self.root.after(0, self.status_var.set, msg)
         self.root.after(0, lambda: self.status_lbl.configure(foreground=self.status_color))
+
+    def render_lang(self):
+        """Cập nhật text của toàn bộ widget theo ngôn ngữ hiện tại."""
+        self.lang_btn.config(text=t("lang_btn"))
+        self.lbl_tagline.config(text=t("tagline"))
+        self.lbl_region_title.config(text=t("region_title"))
+        self.lbl_mic_title.config(text=t("mic_title"))
+        self.pick_btn.config(text=t("pick_btn"))
+        self.rec_btn.config(text=t("rec_stop" if self.stop_evt else "rec_start"))
+        self.an_btn.config(text=t("analyze"))
+        self.sess_btn.config(text=t("sessions"))
+        if not self.hwnd:
+            self.region_lbl.config(text=t("region_none"))
+        if self.mic_var.get() == self.mic_none:  # đang hiện placeholder -> đổi theo ngôn ngữ
+            self.mic_none = t("mic_none")
+            self.mic_var.set(self.mic_none)
+        self.status(t("ready"))
+
+    def toggle_lang(self):
+        global lang
+        lang = "vi" if lang == "en" else "en"
+        self.render_lang()
 
     def tick(self):
         lvl = min(100, self.meter.level * 600)
@@ -467,10 +557,9 @@ class App:
 
     def start_meter(self):
         mic = self.mic_var.get()
-        if mic and "không có" not in mic:
+        if mic and mic != self.mic_none:
             ok = self.meter.start(mic)
-            self.status("Mic OK — nói thử, thanh VU phải rung." if ok
-                        else "Không mở được mic này để đo mức (vẫn quay được).")
+            self.status(t("mic_ok") if ok else t("mic_fail"))
 
     # -- pick region --
     def pick(self):
@@ -483,7 +572,7 @@ class App:
                 self.region_lbl.config(text=label, fg="#f2a33c")
             else:
                 self.hwnd = self.screen_rect = None
-                self.region_lbl.config(text="Toàn màn hình", fg="#98a0ad")
+                self.region_lbl.config(text=t("full_screen"), fg="#98a0ad")
 
         RegionPicker(self.root, done)
 
@@ -492,14 +581,14 @@ class App:
         if self.stop_evt:  # đang quay -> dừng
             self.stop_evt.set()
             self.stop_evt = None
-            self.rec_btn.config(text="●  Bắt đầu quay", style="Accent.TButton")
+            self.rec_btn.config(text=t("rec_start"), style="Accent.TButton")
             self.elapsed_var.set("—:—")
             self.an_btn.config(state="normal")
             return
         self.outdir = SESSIONS / datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.outdir.mkdir(parents=True, exist_ok=True)
         mic = self.mic_var.get()
-        audio = mic if mic and "không có" not in mic else None
+        audio = mic if mic and mic != self.mic_none else None
         self.meter.stop()  # nhả mic cho ffmpeg
         self.stop_evt = threading.Event()
         self.rec_start = time.monotonic()
@@ -507,7 +596,7 @@ class App:
                          args=(self.ff, self.hwnd, self.screen_rect, audio,
                                self.outdir, self.stop_evt, self.status),
                          daemon=True).start()
-        self.rec_btn.config(text="■  Dừng quay", style="Danger.TButton")
+        self.rec_btn.config(text=t("rec_stop"), style="Danger.TButton")
         self.an_btn.config(state="disabled")
 
     # -- review server (server.py chạy nền trong app) --
@@ -535,17 +624,15 @@ class App:
 
         def work():
             import pipeline
-            self.status("Đang upload + phân tích bằng Gemini (vài phút)...",
-                        color="#6ea8ff")
+            self.status(t("analyzing"), color="#6ea8ff")
             try:
                 data = pipeline.analyze_session(outdir)
             except Exception as e:
-                self.status(f"Phân tích lỗi: {str(e)[-300:]}", color="#ff6b6b")
+                self.status(t("analyze_err", err=str(e)[-300:]), color="#ff6b6b")
                 self.root.after(0, self.an_btn.config, {"state": "normal"})
                 return
             self.root.after(0, self.open_review, outdir.name)
-            self.status(f"Xong — {len(data['bugs'])} bug. Review + push Jira trong trình duyệt.",
-                        color="#5fd39a")
+            self.status(t("done", n=len(data["bugs"])), color="#5fd39a")
             self.root.after(0, self.an_btn.config, {"state": "normal"})
 
         threading.Thread(target=work, daemon=True).start()
